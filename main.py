@@ -386,8 +386,7 @@ async def show_partner_profile(bot, user_id, partner_id):
             f"\n👤 Gender: {partner.get('gender', 'Not set').capitalize()}"
             f"\n🔢 Age: {partner.get('age', 'Not set')}"
             f"\n🌐 Language: {LANGUAGES.get(partner.get('language', 'en'), 'English'}"
-            f"\n📝 Bio: {partner.get('bio', 'Not set')}"
-        )
+            f"\n📝 Bio: {partner.get('bio', 'Not set')}")
     
     keyboard = [
         [
