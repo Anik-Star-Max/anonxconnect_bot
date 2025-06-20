@@ -54,46 +54,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Rest of your code remains the same...
-import os
-import logging
-import sqlite3
-import random
-from datetime import datetime, timedelta
-from telegram import (
-    Update,
-    ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    KeyboardButton
-)
-from telegram.ext import (
-    Application,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-    ConversationHandler,
-    filters
-)
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
-
-# Bot configuration
-TOKEN = os.getenv('TELEGRAM_TOKEN')
-ADMIN_USERNAME = os.getenv('ADMIN_USERNAME')
-DATABASE_NAME = "anonxconnect.db"
-BOT_NAME = "Anonymous Connect"
-
-# Enable logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
 
 # States for conversation
 MENU, SET_LANGUAGE, SET_INTERESTS, SET_LOCATION, CHATTING, REPORT_USER, SET_RATING = range(7)
