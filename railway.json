@@ -1,4 +1,7 @@
 {
+  "env": {
+    "TELEGRAM_BOT_TOKEN": "8117045817:AAEIWRAV3iDt97-Cu0lMoEAvte1n4i4wNUw"
+  },
   "build": {
     "builder": "NIXPACKS"
   },
