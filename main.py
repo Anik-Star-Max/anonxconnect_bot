@@ -22,8 +22,9 @@ from telegram.ext import (
 
 # ===== CONFIGURATION =====
 TOKEN = os.getenv("TELEGRAM_TOKEN", "8117045817:AAEIWRAV3iDt97-Cu0lMoEAvte1n4i4wNUw")
+ADMIN_USERNAME = "@mysteryman02"  # Your admin username
 BOT_NAME = "Anonymous Connect"
-VIP_COST = 100  # 💎 required for VIP status
+VIP_COST = 500  # 💎 required for VIP status (updated to 500)
 
 # ===== DATA STORAGE =====
 DB_FILE = "users.json"
@@ -67,7 +68,9 @@ def save_user(user_id, data):
             "dislikes": 0,
             "complaints": 0,
             "bonus_points": 0,
-            "blacklisted": False
+            "blacklisted": False,
+            "referral_code": f"REF{random.randint(1000,9999)}",
+            "referred_by": None
         }
     users[user_id].update(data)
     save_users(users)
@@ -77,8 +80,8 @@ def save_user(user_id, data):
 (
     START, PROFILE_PHOTO, PROFILE_GENDER, PROFILE_LANGUAGE, PROFILE_BIO,
     MENU, CHATTING, FEEDBACK, COMPLAINT_TYPE, COMPLAINT_DETAILS,
-    VIP_PROFILE_VIEW
-) = range(11)
+    VIP_PROFILE_VIEW, REFERRAL
+) = range(12)
 
 # ===== LANGUAGES =====
 LANGUAGES = {
@@ -119,6 +122,7 @@ def get_language_keyboard():
     for i in range(0, len(languages), 2):
         row = [f"{name} ({code})" for code, name in languages[i:i+2]]
         keyboard.append(row)
+    keyboard.append(["Back ↩️"])
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 def get_feedback_keyboard():
@@ -156,6 +160,10 @@ def get_profile_preview_keyboard(partner_id):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user = get_user(user_id)
+    
+    # Check if admin
+    if update.effective_user.username == ADMIN_USERNAME[1:]:  # Remove '@'
+        save_user(user_id, {"vip": True})
     
     if user and user.get("photo") and user.get("gender") and user.get("language"):
         await update.message.reply_text(
@@ -207,7 +215,20 @@ async def handle_gender(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def handle_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    language = update.message.text.split("(")[-1].split(")")[0].strip()  # "English (en)"
+    text = update.message.text
+    
+    if text == "Back ↩️":
+        user = get_user(user_id)
+        await update.message.reply_text(
+            "Returning to menu...",
+            reply_markup=get_main_menu(user)
+        )
+        return MENU
+    
+    if "(" in text and ")" in text:
+        language = text.split("(")[-1].split(")")[0].strip()
+    else:
+        language = text
     
     if language not in LANGUAGES:
         await update.message.reply_text("Invalid language selection. Please try again.")
@@ -417,10 +438,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     partner_id = ACTIVE_CHATS[user_id]
     
+    # VIP Translation Feature (placeholder)
+    user = get_user(user_id)
+    partner = get_user(partner_id)
+    if user.get("vip") and partner.get("language") != user.get("language"):
+        translated_text = f"🌐 (Translated) {update.message.text}"
+    else:
+        translated_text = update.message.text
+    
     if update.message.text:
         await context.bot.send_message(
             chat_id=partner_id,
-            text=update.message.text
+            text=translated_text
         )
     elif update.message.photo:
         photo = await update.message.photo[-1].get_file()
@@ -536,6 +565,12 @@ async def vip_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user = get_user(user_id)
     
+    # Admin always has VIP
+    if update.effective_user.username == ADMIN_USERNAME[1:]:
+        save_user(user_id, {"vip": True})
+        await update.message.reply_text("🌟 Admin privileges activated! You have full VIP access.")
+        return MENU
+    
     if user.get("vip"):
         await update.message.reply_text("🌟 You're already a VIP member!")
         return MENU
@@ -547,7 +582,11 @@ async def vip_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
         })
         await update.message.reply_text(
             "🎉 Congratulations! You're now a VIP member!\n"
-            "You now have access to exclusive features.",
+            "You now have access to exclusive features:"
+            "\n- See partner's full profile"
+            "\n- Automatic message translation"
+            "\n- View gender and bio"
+            "\n- Priority matching",
             reply_markup=get_main_menu(get_user(user_id))
         )
     else:
@@ -603,24 +642,114 @@ async def daily_bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return MENU
 
+async def referral_program(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    await update.message.reply_text(
+        f"🤝 *Referral Program*\n\n"
+        f"Your referral code: `{user['referral_code']}`\n\n"
+        "Share this code with friends:\n"
+        "- When they join using your code, you get 50 💎\n"
+        "- They get 25 💎 to start\n\n"
+        "To use a referral code: /invite <code>",
+        parse_mode="Markdown"
+    )
+    return MENU
+
+async def invite_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    if len(context.args) < 1:
+        await update.message.reply_text("Usage: /invite <code>")
+        return
+    
+    code = context.args[0].upper()
+    
+    # Check if user already used a referral
+    if user.get("referred_by"):
+        await update.message.reply_text("❌ You've already used a referral code.")
+        return MENU
+    
+    # Find user with this referral code
+    referrer_id = None
+    users = load_users()
+    for uid, data in users.items():
+        if data.get("referral_code") == code:
+            referrer_id = uid
+            break
+    
+    if not referrer_id:
+        await update.message.reply_text("❌ Invalid referral code.")
+        return MENU
+    
+    # Apply referral benefits
+    save_user(user_id, {"referred_by": referrer_id, "diamonds": user.get("diamonds", 0) + 25})
+    
+    referrer = get_user(referrer_id)
+    save_user(referrer_id, {"diamonds": referrer.get("diamonds", 0) + 50})
+    
+    await update.message.reply_text(
+        "✅ Referral applied! You received 25 💎\n"
+        "Your friend received 50 💎"
+    )
+    return MENU
+
+async def my_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    profile_text = (
+        f"👤 *Your Profile*\n\n"
+        f"💎 Diamonds: {user.get('diamonds', 0)}\n"
+        f"⭐ Likes: {user.get('likes', 0)}\n"
+        f"👎 Dislikes: {user.get('dislikes', 0)}\n"
+        f"🚫 Complaints: {user.get('complaints', 0)}\n"
+        f"🎁 Bonus Points: {user.get('bonus_points', 0)}\n"
+        f"👑 VIP Status: {'✅ Yes' if user.get('vip') else '❌ No'}\n\n"
+        f"• Gender: {user.get('gender', 'Not set').capitalize()}\n"
+        f"• Language: {LANGUAGES.get(user.get('language', 'en'), 'English')}\n"
+        f"• Bio: {user.get('bio', 'Not set')}\n\n"
+        f"Referral Code: `{user.get('referral_code', 'N/A')}`"
+    )
+    
+    await update.message.reply_text(
+        profile_text,
+        parse_mode="Markdown",
+        reply_markup=get_main_menu(user)
+    )
+    return MENU
+
+async def change_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "🌐 Select your preferred language:",
+        reply_markup=get_language_keyboard()
+    )
+    return PROFILE_LANGUAGE
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
         "❓ *Help & Commands*\n\n"
         "• /start - Begin or view your profile\n"
         "• /menu - Main menu\n"
-        "• Start Chat - Find an anonymous partner\n"
-        "• Stop Chat - End current conversation\n"
-        "• Next Partner - Find a new chat partner\n"
-        "• VIP Access - Unlock premium features\n"
-        "• Referral Program - Earn diamonds\n"
-        "• Daily Bonus - Claim free diamonds\n"
-        "• Language - Change your language\n"
-        "• Report User - Submit a complaint\n\n"
+        "• /invite <code> - Apply referral code\n"
+        "• /help - Show this help\n\n"
         "💎 VIP Features:\n"
         "- See partner's full profile\n"
         "- View gender and bio\n"
-        "- See username after chat\n"
-        "- Priority matching\n"
+        "- Automatic message translation\n"
+        "- Priority matching\n\n"
+        "📱 Menu Options:\n"
+        "- Start Chat 🚀: Find anonymous partner\n"
+        "- Stop Chat ⛔: End current conversation\n"
+        "- Next Partner ⏭️: Find new chat partner\n"
+        "- My Profile 👤: View your details\n"
+        "- VIP Access 💎: Unlock premium features\n"
+        "- Referral Program 🤝: Earn diamonds\n"
+        "- Daily Bonus 🎁: Claim free diamonds\n"
+        "- Language 🌐: Change language\n"
+        "- Report User 🛑: Submit complaint"
     )
     
     await update.message.reply_text(
@@ -673,10 +802,14 @@ def main() -> None:
                 MessageHandler(filters.Regex(r"^Stop Chat ⛔$"), stop_chat),
                 MessageHandler(filters.Regex(r"^Next Partner ⏭️$"), start_chat),
                 MessageHandler(filters.Regex(r"^VIP Access 💎$"), vip_access),
+                MessageHandler(filters.Regex(r"^Referral Program 🤝$"), referral_program),
                 MessageHandler(filters.Regex(r"^Daily Bonus 🎁$"), daily_bonus),
-                MessageHandler(filters.Regex(r"^Report User 🛑$"), lambda u, c: handle_feedback(u, c, from_menu=True)),
+                MessageHandler(filters.Regex(r"^Language 🌐$"), change_language),
+                MessageHandler(filters.Regex(r"^Report User 🛑$"), lambda u, c: handle_feedback(u, c)),
                 MessageHandler(filters.Regex(r"^Help ❓$"), help_command),
-                CommandHandler("menu", menu)
+                MessageHandler(filters.Regex(r"^My Profile 👤$"), my_profile),
+                CommandHandler("menu", menu),
+                CommandHandler("invite", invite_command)
             ],
             CHATTING: [
                 CommandHandler("stop", stop_chat),
