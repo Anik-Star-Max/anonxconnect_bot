@@ -3,8 +3,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import os
 
 # Token from Railway ENV variable
-TOKEN = os.environ.get("BOT_TOKEN=8117045817:AAEIWRAV3iDt97-Cu0lMoEAvte1n4i4wNUw
-")
+TOKEN = os.environ.get("BOT_TOKEN")
 
 # /start command handler
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
