@@ -1,11 +1,3 @@
-TOKEN = os.getenv('TELEGRAM_TOKEN', '8117045817:AAEIWRAV3iDt97-Cu0lMoEAvte1n4i4wNUw')  # Fallback to your token
-if not TOKEN or not TOKEN.startswith('8117045817:'):  # Validate token format
-    raise ValueError("""
-    Invalid Telegram Token!
-    Get a valid token from @BotFather and set it as:
-    1. Railway Environment Variable (TELEGRAM_TOKEN)
-    2. Or in .env file for local development
-    """)
 import os
 import logging
 import sqlite3
@@ -33,7 +25,15 @@ from telegram.error import InvalidToken
 
 # Load environment variables
 load_dotenv()
-
+TOKEN = os.getenv('TELEGRAM_TOKEN', '8117045817:AAEIWRAV3iDt97-Cu0lMoEAvte1n4i4wNUw')  # Fallback to your token
+if not TOKEN or not TOKEN.startswith('8117045817:'):  # Validate token format
+    raise ValueError("""
+    Invalid Telegram Token!
+    Get a valid token from @BotFather and set it as:
+    1. Railway Environment Variable (TELEGRAM_TOKEN)
+    2. Or in .env file for local development
+    """)
+    
 # Bot configuration
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', '@mysteryman02')
