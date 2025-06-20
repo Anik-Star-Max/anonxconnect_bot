@@ -58,7 +58,6 @@ async def next_chat(update: Update, context: CallbackContext):
         await update.message.reply_text("🚫 You are banned from using this bot")
         return
     
-    # Disconnect from current partner
     if user['partner']:
         partner_id = user['partner']
         db.update_user(partner_id, partner=None, waiting=True)
@@ -69,10 +68,8 @@ async def next_chat(update: Update, context: CallbackContext):
     
     partner_id = db.find_match(user_id)
     if partner_id:
-        # Connect users
         db.update_user(user_id, partner=partner_id, waiting=False)
         db.update_user(partner_id, partner=user_id, waiting=False)
-        
         await context.bot.send_message(user_id, "✅ You're now connected to an anonymous partner! Start chatting!")
         await context.bot.send_message(partner_id, "✅ You're now connected to an anonymous partner! Start chatting!")
     else:
@@ -129,16 +126,9 @@ async def report(update: Update, context: CallbackContext):
     
     db.add_complaint(user_id, user['partner'], reason)
     db.update_user(user['partner'], reported_count=user.get('reported_count', 0) + 1)
-    
-    # Notify admin
-    await context.bot.send_message(
-        config.ADMIN_ID,
-        f"🚨 New Report!\n\nFrom: {user_id}\nAgainst: {user['partner']}\nReason: {reason}"
-    )
-    
+    await context.bot.send_message(config.ADMIN_ID, f"🚨 New Report!\n\nFrom: {user_id}\nAgainst: {user['partner']}\nReason: {reason}")
     await update.message.reply_text("✅ Your report has been submitted. Admins will review it shortly.")
 
-# Message handler
 async def handle_message(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     user = get_user(update)
@@ -159,31 +149,20 @@ async def handle_message(update: Update, context: CallbackContext):
         await update.message.reply_text("⚠️ Partner disconnected. Use /next to find a new chat.")
         return
     
-    # Translate message if needed
-    partner_lang = partner['language']
-    user_lang = user['language']
-    
     try:
         if update.message.text:
-            translated_text = translate_message(update.message.text, user_lang, partner_lang)
+            translated_text = translate_message(update.message.text, user['language'], partner['language'])
             await context.bot.send_message(partner_id, translated_text)
         elif update.message.sticker:
             await context.bot.send_sticker(partner_id, update.message.sticker.file_id)
         elif update.message.photo:
-            caption = update.message.caption
-            if caption:
-                caption = translate_message(caption, user_lang, partner_lang)
-            await context.bot.send_photo(
-                partner_id,
-                update.message.photo[-1].file_id,
-                caption=caption
-            )
+            caption = translate_message(update.message.caption, user['language'], partner['language']) if update.message.caption else None
+            await context.bot.send_photo(partner_id, update.message.photo[-1].file_id, caption=caption)
     except Exception as e:
         logger.error(f"Message forwarding failed: {e}")
         db.update_user(user_id, partner=None)
         await update.message.reply_text("⚠️ Message delivery failed. Partner might have blocked the bot.")
 
-# Admin commands
 async def ban_user(update: Update, context: CallbackContext):
     if update.effective_user.id != config.ADMIN_ID:
         return
@@ -194,16 +173,13 @@ async def ban_user(update: Update, context: CallbackContext):
     
     user_id = context.args[0]
     reason = ' '.join(context.args[1:])
-    
     db.update_user(user_id, banned=True)
     await context.bot.send_message(user_id, f"🚫 You've been banned. Reason: {reason}")
     await update.message.reply_text(f"✅ User {user_id} banned successfully.")
 
-# Callback query handlers
 async def button_handler(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
-    
     user_id = update.effective_user.id
     data = query.data
     
@@ -215,46 +191,26 @@ async def button_handler(update: Update, context: CallbackContext):
             [InlineKeyboardButton("5 Days - 2000 💎", callback_data='vip_5')],
         ]
         await query.edit_message_text(
-            "💎 VIP Packages:\n\n"
-            "1. 1 Day - 500 Diamonds\n"
-            "2. 2 Days - 1000 Diamonds\n"
-            "3. 3 Days - 1500 Diamonds\n"
-            "4. 5 Days - 2000 Diamonds\n\n"
-            "Select a package:",
+            "💎 VIP Packages:\n\n1. 1 Day - 500 Diamonds\n2. 2 Days - 1000 Diamonds\n3. 3 Days - 1500 Diamonds\n4. 5 Days - 2000 Diamonds\n\nSelect a package:",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-    
     elif data.startswith('vip_'):
         days = int(data.split('_')[1])
         cost = config.VIP_PRICES[days]
         user = get_user(update)
-        
         if user['vip']['diamonds'] >= cost:
             expiry = datetime.now() + timedelta(days=days)
-            db.update_user(
-                user_id,
-                vip_expiry=expiry.isoformat(),
-                diamonds=user['vip']['diamonds'] - cost
-            )
+            db.update_user(user_id, vip_expiry=expiry.isoformat(), diamonds=user['vip']['diamonds'] - cost)
             await query.edit_message_text(f"🎉 VIP activated for {days} days!")
         else:
             await query.edit_message_text("❌ Not enough diamonds!")
 
-# Setup all handlers
 def setup_handlers(application):
-    # Command handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("next", next_chat))
     application.add_handler(CommandHandler("stop", stop_chat))
     application.add_handler(CommandHandler("menu", menu))
     application.add_handler(CommandHandler("report", report))
     application.add_handler(CommandHandler("ban", ban_user))
-    
-    # Message handler
-    application.add_handler(MessageHandler(
-        filters.TEXT | filters.PHOTO | filters.Sticker.ALL,
-        handle_message
-    ))
-    
-    # Callback query handler
+    application.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.Sticker.ALL, handle_message))
     application.add_handler(CallbackQueryHandler(button_handler))
