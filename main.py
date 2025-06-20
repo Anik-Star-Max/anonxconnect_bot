@@ -767,12 +767,13 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await msg.edit_message_text(
             text="Main Menu:",
             reply_markup=InlineKeyboardMarkup(keyboard)
+     )
     else:
         await context.bot.send_message(
             chat_id=user_id,
             text="Main Menu:",
-            reply_markup=InlineKeyboardMarkup(keyboard))
-
+            reply_markup=InlineKeyboardMarkup(keyboard)
+     )
 async def my_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user = user_data.get(str(user_id), {})
