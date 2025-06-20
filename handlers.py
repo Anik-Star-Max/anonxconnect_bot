@@ -7,7 +7,9 @@ import config
 import logging
 import os
 
-db = Database()
+async def start(update: Update, context: CallbackContext):
+    db = context.bot_data['db']
+    # rest of the function
 logger = logging.getLogger(__name__)
 
 def get_user(user_id):
