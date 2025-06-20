@@ -78,10 +78,12 @@ logger = logging.getLogger(__name__)
 def load_data():
     global user_data, complaints
     try:
-        with open(USER_DATA_FILE, "r") as f:
-            user_data = json.load(f)
-        with open(COMPLAINTS_FILE, "r") as f:
-            complaints = json.load(f)
+        if os.path.exists(USER_DATA_FILE):
+            with open(USER_DATA_FILE, "r") as f:
+                user_data = json.load(f)
+        if os.path.exists(COMPLAINTS_FILE):
+            with open(COMPLAINTS_FILE, "r") as f:
+                complaints = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         user_data = {}
         complaints = []
@@ -100,7 +102,8 @@ def save_data():
 
 # VIP and diamond management
 def is_vip(user_id):
-    user = user_data.get(str(user_id), {})
+    user_id = str(user_id)
+    user = user_data.get(user_id, {})
     if not user:
         return False
         
@@ -109,8 +112,10 @@ def is_vip(user_id):
         return True
         
     vip_expiry = user.get("vip_expiry")
-    if vip_expiry and datetime.fromisoformat(vip_expiry) > datetime.now():
-        return True
+    if vip_expiry:
+        expiry_date = datetime.fromisoformat(vip_expiry)
+        if expiry_date > datetime.now():
+            return True
     return False
 
 def add_diamonds(user_id, amount):
@@ -130,14 +135,21 @@ def deduct_diamonds(user_id, amount):
 
 def purchase_vip(user_id, days):
     user_id = str(user_id)
+    if days not in VIP_OPTIONS:
+        return False
+        
     cost, days = VIP_OPTIONS[days]
     
     if not deduct_diamonds(user_id, cost):
         return False
         
     current_expiry = user_data[user_id].get("vip_expiry")
-    if current_expiry and datetime.fromisoformat(current_expiry) > datetime.now():
-        new_expiry = datetime.fromisoformat(current_expiry) + timedelta(days=days)
+    if current_expiry:
+        current_date = datetime.fromisoformat(current_expiry)
+        if current_date > datetime.now():
+            new_expiry = current_date + timedelta(days=days)
+        else:
+            new_expiry = datetime.now() + timedelta(days=days)
     else:
         new_expiry = datetime.now() + timedelta(days=days)
         
@@ -147,13 +159,16 @@ def purchase_vip(user_id, days):
 
 # User management
 def is_banned(user_id):
-    user = user_data.get(str(user_id), {})
+    user_id = str(user_id)
+    user = user_data.get(user_id, {})
     if not user:
         return False
         
     ban_expiry = user.get("ban_expiry")
-    if ban_expiry and datetime.fromisoformat(ban_expiry) > datetime.now():
-        return True
+    if ban_expiry:
+        expiry_date = datetime.fromisoformat(ban_expiry)
+        if expiry_date > datetime.now():
+            return True
     return False
 
 def ban_user(user_id, days=1):
@@ -240,7 +255,7 @@ async def set_age(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
     await update.message.reply_text(
         "Select your preferred language:",
-        reply_markup=InlineKeyboardMarkup(language_buttons)
+        reply_markup=InlineKeyboardMarkup(language_buttons))
     )
     return LANGUAGE
 
@@ -354,7 +369,7 @@ async def start_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         active_chats[partner_id] = user_id
         
         # Show partner profile preview
-        await show_partner_profile(update, context, partner_id)
+        await show_partner_profile(context.bot, user_id, partner_id)
         await show_partner_profile(context.bot, partner_id, user_id)
     else:
         waiting_users.append(user_id)
@@ -436,7 +451,7 @@ async def end_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
             del active_chats[partner_id]
         
         # Send feedback options to both users
-        await send_feedback_options(update, context, user_id, partner_id)
+        await send_feedback_options(context.bot, user_id, partner_id)
         await send_feedback_options(context.bot, partner_id, user_id)
 
 async def send_feedback_options(bot, user_id, partner_id):
@@ -666,6 +681,23 @@ async def set_preferences(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Current age range: {user.get('min_age', 18)}-{user.get('max_age', 99)}",
         reply_markup=InlineKeyboardMarkup(keyboard))
 
+async def handle_preferences(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data.split('_')
+    pref_type = data[2]
+    value = data[3]
+    
+    user_id = query.from_user.id
+    user = user_data.get(str(user_id), {})
+    
+    if pref_type == "gender":
+        user["search_gender"] = value
+        await query.edit_message_text(f"Gender preference set to: {value.capitalize()}")
+    
+    save_data()
+    await show_menu(context.bot, user_id)
+
 # Help and rules
 async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
@@ -695,9 +727,7 @@ async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"📜 *Community Rules:*\n\n{rules}", parse_mode="Markdown")
 
 # Menu and commands
-async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    
+async def show_menu(bot, user_id):
     keyboard = [
         [InlineKeyboardButton("Start Chat", callback_data="start_chat")],
         [InlineKeyboardButton("VIP Access", callback_data="vip_access")],
@@ -707,7 +737,7 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Help", callback_data="help")]
     ]
     
-    await context.bot.send_message(
+    await bot.send_message(
         chat_id=user_id,
         text="Main Menu:",
         reply_markup=InlineKeyboardMarkup(keyboard))
@@ -741,10 +771,15 @@ async def my_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Back to Menu", callback_data="back_menu")]
     ]
     
-    await update.message.reply_photo(
-        photo=user["photo_id"],
-        caption=caption,
-        reply_markup=InlineKeyboardMarkup(keyboard))
+    if "photo_id" in user:
+        await update.message.reply_photo(
+            photo=user["photo_id"],
+            caption=caption,
+            reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        await update.message.reply_text(
+            caption,
+            reply_markup=InlineKeyboardMarkup(keyboard))
 
 # Main function
 def main() -> None:
@@ -788,7 +823,7 @@ def main() -> None:
                       CallbackQueryHandler(set_preferences, pattern=r"^set_preferences$")],
         states={
             PREFERENCES: [
-                CallbackQueryHandler(handle_preferences, pattern=r"^pref_gender_.*"),
+                CallbackQueryHandler(handle_preferences, pattern=r"^pref_.*"),
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_preferences)
             ]
         },
@@ -800,7 +835,7 @@ def main() -> None:
     application.add_handler(complaint_conv)
     application.add_handler(pref_conv)
     application.add_handler(CommandHandler("invite", apply_referral))
-    application.add_handler(CommandHandler("menu", show_menu))
+    application.add_handler(CommandHandler("menu", lambda u, c: show_menu(c.bot, u.effective_user.id)))
     application.add_handler(CommandHandler("stop", end_chat))
     application.add_handler(CommandHandler("next", end_chat))
     application.add_handler(CommandHandler("vip", vip_access))
@@ -810,18 +845,20 @@ def main() -> None:
     application.add_handler(CommandHandler("rules", show_rules))
     
     # Callback handlers
-    application.add_handler(CallbackQueryHandler(start_chat, pattern=r"^startchat_"))
-    application.add_handler(CallbackQueryHandler(handle_feedback, pattern=r"^fb_"))
-    application.add_handler(CallbackQueryHandler(handle_vip_purchase, pattern=r"^vip_"))
+    application.add_handler(CallbackQueryHandler(start_chat, pattern=r"^startchat_.*"))
+    application.add_handler(CallbackQueryHandler(handle_feedback, pattern=r"^fb_.*"))
+    application.add_handler(CallbackQueryHandler(handle_vip_purchase, pattern=r"^vip_.*"))
     application.add_handler(CallbackQueryHandler(vip_access, pattern=r"^vip_access$"))
     application.add_handler(CallbackQueryHandler(show_referral_info, pattern=r"^referral_info$"))
     application.add_handler(CallbackQueryHandler(my_profile, pattern=r"^my_profile$"))
-    application.add_handler(CallbackQueryHandler(show_menu, pattern=r"^back_menu$"))
+    application.add_handler(CallbackQueryHandler(lambda u, c: show_menu(c.bot, u.effective_user.id), pattern=r"^back_menu$"))
     application.add_handler(CallbackQueryHandler(show_help, pattern=r"^help$"))
+    application.add_handler(CallbackQueryHandler(set_preferences, pattern=r"^set_preferences$"))
+    application.add_handler(CallbackQueryHandler(start_chat, pattern=r"^start_chat$"))
     
     # Message handler (for chat)
     application.add_handler(MessageHandler(
-        filters.TEXT | filters.PHOTO, 
+        (filters.TEXT | filters.PHOTO) & ~filters.COMMAND, 
         handle_chat_message
     ))
     
