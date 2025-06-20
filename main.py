@@ -1,3 +1,23 @@
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import os
+
+# Token from Railway ENV variable
+TOKEN = os.environ.get("BOT_TOKEN=8117045817:AAEIWRAV3iDt97-Cu0lMoEAvte1n4i4wNUw
+")
+
+# /start command handler
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("👋 Hello! This is AnonXConnect Bot. I'm live on Railway!")
+
+# Create Application
+app = ApplicationBuilder().token(TOKEN).build()
+app.add_handler(CommandHandler("start", start))
+
+# Start polling
+if __name__ == "__main__":
+    app.run_polling()
+
 import logging
 import re
 import sqlite3
