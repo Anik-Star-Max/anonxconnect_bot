@@ -377,12 +377,12 @@ async def show_partner_profile(update: Update, context: ContextTypes.DEFAULT_TYP
     # VIP users see more details
     if is_vip(user_id):
         caption += (
-             f"👤 Partner Info:\n"
-    f"🧑 Gender: {partner.get('gender', 'Not set')}\n"
-    f"🌐 Language: {partner.get('language', 'Not set')}\n"
-    f"📝 Bio: {partner.get('bio', 'Not set')}"
-)
-   
+            f"\n👤 Gender: {partner.get('gender', 'Not set').capitalize()}"
+            f"\n🔢 Age: {partner.get('age', 'Not set')}"
+            f"\n🌐 Language: {LANGUAGES.get(partner.get('language', 'en'), 'English'}"
+            f"\n📝 Bio: {partner.get('bio', 'Not set')}"
+        )
+    
     keyboard = [
         [
             InlineKeyboardButton("👍 Like", callback_data=f"like_{partner_id}"),
@@ -593,7 +593,7 @@ async def vip_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "- Automatic message translation\n"
         "- Priority matching\n"
         "- Increased diamond rewards",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=InlineKeyboardMarkup(keyboard))
     )
 
 async def handle_vip_purchase(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -674,7 +674,7 @@ async def set_preferences(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Set your chat preferences:\n"
         f"Current gender preference: {user.get('search_gender', 'any').capitalize()}\n"
         f"Current age range: {user.get('min_age', 18)}-{user.get('max_age', 99)}",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=InlineKeyboardMarkup(keyboard))
     )
     return PREFERENCES
 
@@ -763,30 +763,28 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     
     if hasattr(msg, 'edit_message_text'):
-        # CORRECTED LINE: Removed extra parenthesis
         await msg.edit_message_text(
             text="Main Menu:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-     )
+            reply_markup=InlineKeyboardMarkup(keyboard))
     else:
         await context.bot.send_message(
             chat_id=user_id,
             text="Main Menu:",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-     )
+            reply_markup=InlineKeyboardMarkup(keyboard))
+
 async def my_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user = user_data.get(str(user_id), {})
     
     caption = (
-    f"👤 Your Profile\n"
-    f"💎 Diamonds: {user.get('diamonds', 0)}\n"
-    f"❤️ Likes: {user.get('likes', 0)}\n"
-    f"👎 Dislikes: {user.get('dislikes', 0)}\n"
-    f"🔤 Language: {LANGUAGES.get(user.get('language', 'en'), 'English')}\n"
-    f"⚧️ Gender: {user.get('gender', 'Not set').capitalize()}\n"
-    f"🔢 Age: {user.get('age', 'Not set')}\n"
-    f"📝 Bio: {user.get('bio', 'Not set')}\n"
+        f"👤 Your Profile\n"
+        f"💎 Diamonds: {user.get('diamonds', 0)}\n"
+        f"❤️ Likes: {user.get('likes', 0)}\n"
+        f"👎 Dislikes: {user.get('dislikes', 0)}\n"
+        f"🔤 Language: {LANGUAGES.get(user.get('language', 'en'), 'English'}\n"
+        f"⚧️ Gender: {user.get('gender', 'Not set').capitalize()}\n"
+        f"🔢 Age: {user.get('age', 'Not set')}\n"
+        f"📝 Bio: {user.get('bio', 'Not set')}\n"
     )
     
     if is_vip(user_id):
