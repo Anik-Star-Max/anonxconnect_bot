@@ -593,7 +593,7 @@ async def vip_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "- Automatic message translation\n"
         "- Priority matching\n"
         "- Increased diamond rewards",
-        reply_markup=InlineKeyboardMarkup(keyboard))
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
 async def handle_vip_purchase(update: Update, context: ContextTypes.DEFAULT_TYPE):
