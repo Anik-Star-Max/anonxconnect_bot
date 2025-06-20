@@ -1,10 +1,13 @@
-from telegram.ext import Updater
+from telegram.ext import Application
 from handlers import setup_handlers
 import config
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from database import Database
 
+app = Application.builder().token(config.BOT_TOKEN).build()
+setup_handlers(app)
+app.run_polling()
 # Initialize logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
