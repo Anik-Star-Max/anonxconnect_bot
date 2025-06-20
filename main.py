@@ -1,5 +1,25 @@
-import telebot
-from telebot import types
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+import os
+
+# Get the bot token from Railway environment variable
+TOKEN = os.environ.get("BOT_TOKEN")
+
+# /start command
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "👋 Welcome to *AnonXConnect!*\n\n🔹 Chat anonymously\n🔹 Make new friends\n🔹 No names, just vibes\n\nType /next to begin, /stop to end.\nLet’s go 🚀",
+        parse_mode="Markdown"
+    )
+
+# Build bot app
+app = ApplicationBuilder().token(TOKEN).build()
+app.add_handler(CommandHandler("start", start))
+
+# Run the bot
+if __name__ == "__main__":
+    app.run_polling()
+
 
 TOKEN = "8117045817:AAEIWRAV3iDt97-Cu0lMoEAvte1n4i4wNUw"
 bot = telebot.TeleBot(TOKEN)
