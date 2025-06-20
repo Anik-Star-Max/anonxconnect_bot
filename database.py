@@ -38,7 +38,10 @@ class Database:
                 'banned': False,
                 'reported_count': 0,
                 'waiting': False,
-                'last_active': datetime.now().isoformat()
+                'last_active': datetime.now().isoformat(),
+                'pref_gender': 'any',
+                'pref_min_age': 13,
+                'pref_max_age': 100
             }
             self.save_users()
     
@@ -46,7 +49,7 @@ class Database:
         user = self.users.get(str(user_id))
         if user:
             for key, value in kwargs.items():
-                if key == 'vip_expiry' and value:
+                if key == 'vip_expiry':
                     user['vip']['expiry'] = value
                 elif key == 'diamonds':
                     user['vip']['diamonds'] = value
@@ -54,22 +57,25 @@ class Database:
                     user[key] = value
             user['last_active'] = datetime.now().isoformat()
             self.save_users()
+            return True
+        return False
     
     def is_vip(self, user_id):
         user = self.users.get(str(user_id))
         if not user or user['banned']:
             return False
-        
         vip_expiry = user['vip'].get('expiry')
         if vip_expiry and datetime.fromisoformat(vip_expiry) > datetime.now():
             return True
         return False
     
     def add_complaint(self, from_user, against_user, reason):
-        self.complaints[str(datetime.now())] = {
+        complaint_id = f"{datetime.now().timestamp()}"
+        self.complaints[complaint_id] = {
             'from_user': from_user,
             'against_user': against_user,
-            'reason': reason
+            'reason': reason,
+            'resolved': False
         }
         self.save_complaints()
     
@@ -78,13 +84,11 @@ class Database:
         if not current_user or current_user['banned'] or current_user['partner']:
             return None
         
-        preferences = {}
-        if self.is_vip(user_id):
-            preferences = {
-                'gender': current_user.get('pref_gender', 'any'),
-                'min_age': current_user.get('pref_min_age', 0),
-                'max_age': current_user.get('pref_max_age', 100)
-            }
+        preferences = {
+            'gender': current_user.get('pref_gender', 'any'),
+            'min_age': current_user.get('pref_min_age', 13),
+            'max_age': current_user.get('pref_max_age', 100)
+        } if self.is_vip(user_id) else {'gender': 'any', 'min_age': 13, 'max_age': 100}
         
         for uid, user in self.users.items():
             if (uid != str(user_id) and 
@@ -92,7 +96,7 @@ class Database:
                 not user['banned'] and 
                 not user['partner']):
                 
-                # Check VIP preferences
+                # VIP preference matching
                 if preferences['gender'] != 'any' and user['gender'] != preferences['gender']:
                     continue
                 if user['age'] and (user['age'] < preferences['min_age'] or user['age'] > preferences['max_age']):
@@ -100,3 +104,11 @@ class Database:
                 
                 return uid
         return None
+    
+    def cleanup_inactive_users(self):
+        now = datetime.now()
+        for user_id, user in list(self.users.items()):
+            if user['waiting']:
+                last_active = datetime.fromisoformat(user['last_active'])
+                if (now - last_active).seconds > INACTIVITY_TIMEOUT:
+                    self.update_user(user_id, waiting=False)
