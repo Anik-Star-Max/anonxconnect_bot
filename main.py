@@ -763,9 +763,10 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     
     if hasattr(msg, 'edit_message_text'):
+        # CORRECTED LINE: Removed extra parenthesis
         await msg.edit_message_text(
             text="Main Menu:",
-            reply_markup=InlineKeyboardMarkup(keyboard))
+            reply_markup=InlineKeyboardMarkup(keyboard)
     else:
         await context.bot.send_message(
             chat_id=user_id,
