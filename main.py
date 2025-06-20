@@ -255,7 +255,7 @@ async def set_age(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     
     await update.message.reply_text(
         "Select your preferred language:",
-        reply_markup=InlineKeyboardMarkup(language_buttons))
+        reply_markup=InlineKeyboardMarkup(language_buttons)
     )
     return LANGUAGE
 
