@@ -2,32 +2,35 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 import os
 
-# Token from Railway ENV variable
+# Get the bot token from Railway environment variable
 TOKEN = os.environ.get("BOT_TOKEN")
 
-# /start command handler
+# /start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("👋 Hello! This is AnonXConnect Bot. I'm live on Railway!")
+    await update.message.reply_text(
+        "👋 Welcome to *AnonXConnect!*\n\n🔹 Chat anonymously\n🔹 Make new friends\n🔹 No names, just vibes\n\nType /next to begin, /stop to end.\nLet’s go 🚀",
+        parse_mode="Markdown"
+    )
 
-# Create Application
+# Build bot app
 app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 
-# Start polling
+# Run the bot
 if __name__ == "__main__":
     app.run_polling()
-
+import os
 import logging
-import re
 import sqlite3
+import random
 from datetime import datetime, timedelta
-from random import choice
 from telegram import (
     Update,
     ReplyKeyboardMarkup,
     ReplyKeyboardRemove,
     InlineKeyboardButton,
-    InlineKeyboardMarkup
+    InlineKeyboardMarkup,
+    KeyboardButton
 )
 from telegram.ext import (
     Application,
@@ -39,213 +42,174 @@ from telegram.ext import (
     filters
 )
 
-# Bot configuration
-TOKEN = "8117045817:AAEIWRAV3iDt97-Cu0lMoEAvte1n4i4wNUw"
-ADMIN_USERNAME = "@mysteryman02"
-BOT_USERNAME = "@anonxconnect_bot"
-DATABASE_NAME = "anonxconnect.db"
+# Get token from environment variable
+TOKEN = os.getenv('TELEGRAM_TOKEN', '8117045817:AAEIWRAV3iDt97-Cu0lMoEAvte1n4i4wNUw')
+ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', '@mysteryman02')
+DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///anonxconnect.db')
 
-# Enable logging
+# Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# States for conversation
+# Conversation states
 MENU, SET_LANGUAGE, SET_INTERESTS, SET_LOCATION, CHATTING, REPORT_USER, SET_RATING = range(7)
 
-# Initialize database
-def init_db():
-    conn = sqlite3.connect(DATABASE_NAME)
-    cursor = conn.cursor()
-    
-    # Create users table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS users (
-        user_id INTEGER PRIMARY KEY,
-        username TEXT,
-        first_name TEXT,
-        last_name TEXT,
-        language TEXT DEFAULT 'en',
-        city TEXT DEFAULT '',
-        interests TEXT DEFAULT '',
-        rating REAL DEFAULT 5.0,
-        rating_count INTEGER DEFAULT 0,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    ''')
-    
-    # Create active_chats table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS active_chats (
-        user1_id INTEGER,
-        user2_id INTEGER,
-        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (user1_id, user2_id)
-    )
-    ''')
-    
-    # Create complaints table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS complaints (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        reporter_id INTEGER,
-        reported_id INTEGER,
-        reason TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-    ''')
-    
-    # Create daily_bonus table
-    cursor.execute('''
-    CREATE TABLE IF NOT EXISTS daily_bonus (
-        user_id INTEGER PRIMARY KEY,
-        last_claimed TIMESTAMP
-    )
-    ''')
-    
-    conn.commit()
-    conn.close()
+class Database:
+    def __init__(self, db_url):
+        if db_url.startswith('sqlite:///'):
+            self.conn = sqlite3.connect(db_url[10:])
+        else:
+            # For PostgreSQL or other databases (would need additional setup)
+            self.conn = sqlite3.connect('anonxconnect.db')
+        self.init_db()
 
-init_db()
-
-# Database helper functions
-def get_user(user_id):
-    conn = sqlite3.connect(DATABASE_NAME)
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
-    user = cursor.fetchone()
-    conn.close()
-    return user
-
-def create_user(user_id, username, first_name, last_name):
-    conn = sqlite3.connect(DATABASE_NAME)
-    cursor = conn.cursor()
-    cursor.execute('''
-    INSERT OR IGNORE INTO users (user_id, username, first_name, last_name) 
-    VALUES (?, ?, ?, ?)
-    ''', (user_id, username, first_name, last_name))
-    conn.commit()
-    conn.close()
-
-def update_user(user_id, **fields):
-    conn = sqlite3.connect(DATABASE_NAME)
-    cursor = conn.cursor()
-    set_clause = ', '.join([f"{key} = ?" for key in fields])
-    values = list(fields.values()) + [user_id]
-    cursor.execute(f"UPDATE users SET {set_clause} WHERE user_id = ?", values)
-    conn.commit()
-    conn.close()
-
-def create_chat(user1_id, user2_id):
-    conn = sqlite3.connect(DATABASE_NAME)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO active_chats (user1_id, user2_id) VALUES (?, ?)", (user1_id, user2_id))
-    conn.commit()
-    conn.close()
-
-def delete_chat(user_id):
-    conn = sqlite3.connect(DATABASE_NAME)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM active_chats WHERE user1_id = ? OR user2_id = ?", (user_id, user_id))
-    conn.commit()
-    conn.close()
-
-def get_partner(user_id):
-    conn = sqlite3.connect(DATABASE_NAME)
-    cursor = conn.cursor()
-    cursor.execute('''
-    SELECT 
-        CASE 
-            WHEN user1_id = ? THEN user2_id 
-            ELSE user1_id 
-        END AS partner_id
-    FROM active_chats 
-    WHERE user1_id = ? OR user2_id = ?
-    ''', (user_id, user_id, user_id))
-    partner = cursor.fetchone()
-    conn.close()
-    return partner[0] if partner else None
-
-def get_waiting_users():
-    conn = sqlite3.connect(DATABASE_NAME)
-    cursor = conn.cursor()
-    cursor.execute("SELECT user_id FROM users")
-    all_users = [row[0] for row in cursor.fetchall()]
-    
-    # Get users already in chats
-    cursor.execute("SELECT user1_id, user2_id FROM active_chats")
-    in_chat_users = set()
-    for row in cursor.fetchall():
-        in_chat_users.add(row[0])
-        in_chat_users.add(row[1])
-    
-    # Return users not in chats
-    waiting_users = [user_id for user_id in all_users if user_id not in in_chat_users]
-    conn.close()
-    return waiting_users
-
-def add_complaint(reporter_id, reported_id, reason):
-    conn = sqlite3.connect(DATABASE_NAME)
-    cursor = conn.cursor()
-    cursor.execute('''
-    INSERT INTO complaints (reporter_id, reported_id, reason) 
-    VALUES (?, ?, ?)
-    ''', (reporter_id, reported_id, reason))
-    conn.commit()
-    conn.close()
-
-def claim_daily_bonus(user_id):
-    conn = sqlite3.connect(DATABASE_NAME)
-    cursor = conn.cursor()
-    
-    # Check last claim
-    cursor.execute("SELECT last_claimed FROM daily_bonus WHERE user_id = ?", (user_id,))
-    result = cursor.fetchone()
-    
-    now = datetime.now()
-    can_claim = True
-    
-    if result:
-        last_claimed = datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S")
-        if (now - last_claimed) < timedelta(hours=24):
-            can_claim = False
-    
-    if can_claim:
-        # Update claim time
+    def init_db(self):
+        cursor = self.conn.cursor()
         cursor.execute('''
-        INSERT OR REPLACE INTO daily_bonus (user_id, last_claimed) 
-        VALUES (?, ?)
-        ''', (user_id, now.strftime("%Y-%m-%d %H:%M:%S")))
-        conn.commit()
-    
-    conn.close()
-    return can_claim
+        CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            username TEXT,
+            first_name TEXT,
+            last_name TEXT,
+            language TEXT DEFAULT 'en',
+            city TEXT DEFAULT '',
+            interests TEXT DEFAULT '',
+            rating REAL DEFAULT 5.0,
+            rating_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS active_chats (
+            user1_id INTEGER,
+            user2_id INTEGER,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (user1_id, user2_id)
+        )
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS complaints (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            reporter_id INTEGER,
+            reported_id INTEGER,
+            reason TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        ''')
+        cursor.execute('''
+        CREATE TABLE IF NOT EXISTS daily_bonus (
+            user_id INTEGER PRIMARY KEY,
+            last_claimed TIMESTAMP
+        )
+        ''')
+        self.conn.commit()
 
-def update_rating(user_id, rating):
-    conn = sqlite3.connect(DATABASE_NAME)
-    cursor = conn.cursor()
-    
-    # Get current rating
-    cursor.execute("SELECT rating, rating_count FROM users WHERE user_id = ?", (user_id,))
-    result = cursor.fetchone()
-    if result:
-        current_rating, count = result
-        new_count = count + 1
-        new_rating = ((current_rating * count) + rating) / new_count
+    def get_user(self, user_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+        return cursor.fetchone()
+
+    def create_user(self, user_id, username, first_name, last_name):
+        cursor = self.conn.cursor()
+        cursor.execute('''
+        INSERT OR IGNORE INTO users (user_id, username, first_name, last_name) 
+        VALUES (?, ?, ?, ?)
+        ''', (user_id, username, first_name, last_name))
+        self.conn.commit()
+
+    def update_user(self, user_id, **fields):
+        cursor = self.conn.cursor()
+        set_clause = ', '.join([f"{key} = ?" for key in fields])
+        values = list(fields.values()) + [user_id]
+        cursor.execute(f"UPDATE users SET {set_clause} WHERE user_id = ?", values)
+        self.conn.commit()
+
+    def create_chat(self, user1_id, user2_id):
+        cursor = self.conn.cursor()
+        cursor.execute("INSERT INTO active_chats (user1_id, user2_id) VALUES (?, ?)", (user1_id, user2_id))
+        self.conn.commit()
+
+    def delete_chat(self, user_id):
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM active_chats WHERE user1_id = ? OR user2_id = ?", (user_id, user_id))
+        self.conn.commit()
+
+    def get_partner(self, user_id):
+        cursor = self.conn.cursor()
+        cursor.execute('''
+        SELECT 
+            CASE 
+                WHEN user1_id = ? THEN user2_id 
+                ELSE user1_id 
+            END AS partner_id
+        FROM active_chats 
+        WHERE user1_id = ? OR user2_id = ?
+        ''', (user_id, user_id, user_id))
+        result = cursor.fetchone()
+        return result[0] if result else None
+
+    def get_waiting_users(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT user_id FROM users")
+        all_users = [row[0] for row in cursor.fetchall()]
         
-        # Update rating
-        cursor.execute("UPDATE users SET rating = ?, rating_count = ? WHERE user_id = ?", 
-                      (new_rating, new_count, user_id))
-        conn.commit()
-    
-    conn.close()
+        cursor.execute("SELECT user1_id, user2_id FROM active_chats")
+        in_chat_users = set()
+        for row in cursor.fetchall():
+            in_chat_users.add(row[0])
+            in_chat_users.add(row[1])
+        
+        return [user_id for user_id in all_users if user_id not in in_chat_users]
+
+    def add_complaint(self, reporter_id, reported_id, reason):
+        cursor = self.conn.cursor()
+        cursor.execute('''
+        INSERT INTO complaints (reporter_id, reported_id, reason) 
+        VALUES (?, ?, ?)
+        ''', (reporter_id, reported_id, reason))
+        self.conn.commit()
+
+    def claim_daily_bonus(self, user_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT last_claimed FROM daily_bonus WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+        
+        now = datetime.now()
+        can_claim = True
+        
+        if result:
+            last_claimed = datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S")
+            if (now - last_claimed) < timedelta(hours=24):
+                can_claim = False
+        
+        if can_claim:
+            cursor.execute('''
+            INSERT OR REPLACE INTO daily_bonus (user_id, last_claimed) 
+            VALUES (?, ?)
+            ''', (user_id, now.strftime("%Y-%m-%d %H:%M:%S")))
+            self.conn.commit()
+        
+        return can_claim
+
+    def update_rating(self, user_id, rating):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT rating, rating_count FROM users WHERE user_id = ?", (user_id,))
+        result = cursor.fetchone()
+        if result:
+            current_rating, count = result
+            new_count = count + 1
+            new_rating = ((current_rating * count) + rating) / new_count
+            cursor.execute("UPDATE users SET rating = ?, rating_count = ? WHERE user_id = ?", 
+                          (new_rating, new_count, user_id))
+            self.conn.commit()
+
+# Initialize database
+db = Database(DATABASE_URL)
 
 # Helper functions
-async def send_typing_indicator(context, chat_id):
-    await context.bot.send_chat_action(chat_id=chat_id, action="typing")
-
 def get_main_menu():
     keyboard = [
         ["Begin Chat 🚀", "Next Chat ⏭️"],
@@ -274,18 +238,18 @@ def get_language_options():
 def get_rating_options():
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("⭐", callback_data="rate_1"),
-            InlineKeyboardButton("⭐⭐", callback_data="rate_2"),
-            InlineKeyboardButton("⭐⭐⭐", callback_data="rate_3"),
-            InlineKeyboardButton("⭐⭐⭐⭐", callback_data="rate_4"),
-            InlineKeyboardButton("⭐⭐⭐⭐⭐", callback_data="rate_5")
+            InlineKeyboardButton("1⭐", callback_data="rate_1"),
+            InlineKeyboardButton("2⭐", callback_data="rate_2"),
+            InlineKeyboardButton("3⭐", callback_data="rate_3"),
+            InlineKeyboardButton("4⭐", callback_data="rate_4"),
+            InlineKeyboardButton("5⭐", callback_data="rate_5")
         ]
     ])
 
 # Command handlers
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    create_user(user.id, user.username, user.first_name, user.last_name)
+    db.create_user(user.id, user.username, user.first_name, user.last_name)
     
     await update.message.reply_text(
         f"👋 Welcome to Anonymous Chat!\n\n"
@@ -309,16 +273,14 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def begin_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
-    # Check if already in chat
-    if get_partner(user_id):
+    if db.get_partner(user_id):
         await update.message.reply_text(
             "⚠️ You're already in a chat! Use /stop to end current chat first.",
             reply_markup=get_main_menu()
         )
         return MENU
     
-    # Find a partner
-    waiting_users = get_waiting_users()
+    waiting_users = db.get_waiting_users()
     waiting_users = [uid for uid in waiting_users if uid != user_id]
     
     if not waiting_users:
@@ -333,15 +295,13 @@ async def begin_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return MENU
     
-    partner_id = choice(waiting_users)
-    create_chat(user_id, partner_id)
+    partner_id = random.choice(waiting_users)
+    db.create_chat(user_id, partner_id)
     
-    # Get partner info
-    partner = get_user(partner_id)
+    partner = db.get_user(partner_id)
     interests = partner[6] if partner and len(partner) > 6 else "not set"
     rating = partner[7] if partner and len(partner) > 7 else 5.0
     
-    # Notify both users
     message_text = (
         "🎉 Partner found!\n\n"
         f"• Interests: {interests}\n"
@@ -378,39 +338,36 @@ async def retry_search(context: ContextTypes.DEFAULT_TYPE):
 
 async def next_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    partner_id = get_partner(user_id)
+    partner_id = db.get_partner(user_id)
     
     if partner_id:
-        # Notify partner that chat ended
         await context.bot.send_message(
             chat_id=partner_id,
             text="ℹ️ Your partner has ended the chat.",
             reply_markup=get_main_menu()
         )
-        delete_chat(user_id)
+        db.delete_chat(user_id)
     
     await begin_chat(update, context)
 
 async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    partner_id = get_partner(user_id)
+    partner_id = db.get_partner(user_id)
     
     if partner_id:
-        # Notify partner that chat ended
         await context.bot.send_message(
             chat_id=partner_id,
             text="ℹ️ Your partner has ended the chat.",
             reply_markup=get_main_menu()
         )
         
-        # Ask for rating
         await context.bot.send_message(
             chat_id=partner_id,
             text="Please rate your chat partner:",
             reply_markup=get_rating_options()
         )
     
-    delete_chat(user_id)
+    db.delete_chat(user_id)
     
     await update.message.reply_text(
         "✅ Chat ended successfully.",
@@ -431,9 +388,9 @@ async def handle_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     rating = int(query.data.split("_")[1])
     
-    partner_id = get_partner(user_id)
+    partner_id = db.get_partner(user_id)
     if partner_id:
-        update_rating(partner_id, rating)
+        db.update_rating(partner_id, rating)
     
     await query.answer()
     await query.edit_message_text(
@@ -441,9 +398,9 @@ async def handle_rating(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return MENU
 
-async def my_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def myprofile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    user = get_user(user_id)
+    user = db.get_user(user_id)
     
     if user:
         username = user[1] or "Not set"
@@ -473,9 +430,9 @@ async def my_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     return MENU
 
-async def daily_bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    claimed = claim_daily_bonus(user_id)
+    claimed = db.claim_daily_bonus(user_id)
     
     if claimed:
         await update.message.reply_text(
@@ -502,7 +459,7 @@ async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "• 🔍 Advanced search filters\n"
         "• 🛡️ Ad-free experience\n"
         "• 💬 Unlimited chat requests\n\n"
-        "Contact @mysteryman02 for premium access",
+        f"Contact {ADMIN_USERNAME} for premium access",
         reply_markup=get_main_menu()
     )
     return MENU
@@ -512,9 +469,9 @@ async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📜 Community Guidelines\n\n"
         "1. Respect all users\n"
         "2. No harassment or hate speech\n"
-        "3. No sharing of explicit content\n"
+        "3. No explicit content\n"
         "4. No spamming or advertising\n"
-        "5. No sharing personal information\n"
+        "5. No personal information\n"
         "6. Report inappropriate behavior\n\n"
         "Violations may result in account bans.",
         reply_markup=get_main_menu()
@@ -540,9 +497,7 @@ async def handle_complaint(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return MENU
     
-    # In a real system, we would have the reported user ID
-    # For demo, we'll just log the complaint
-    add_complaint(user_id, None, complaint_text)
+    db.add_complaint(user_id, None, complaint_text)
     
     await update.message.reply_text(
         "✅ Your complaint has been submitted.\n"
@@ -551,7 +506,7 @@ async def handle_complaint(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     return MENU
 
-async def language_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🌐 Select your preferred language:",
         reply_markup=get_language_options()
@@ -563,7 +518,7 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang_code = query.data.split("_")[1]
     user_id = query.from_user.id
     
-    update_user(user_id, language=lang_code)
+    db.update_user(user_id, language=lang_code)
     
     languages = {
         "en": "English",
@@ -577,7 +532,6 @@ async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(
         f"✅ Language set to {languages.get(lang_code, 'English')}"
     )
-    
     return MENU
 
 async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -607,7 +561,7 @@ async def save_interests(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return SET_LANGUAGE
     
-    update_user(user_id, interests=interests)
+    db.update_user(user_id, interests=interests)
     
     await update.message.reply_text(
         "✅ Interests updated successfully!",
@@ -629,7 +583,6 @@ async def save_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     
     if update.message.location:
-        # In a real app, we would reverse geocode to get city name
         city = "From Location"
     else:
         city = update.message.text
@@ -640,50 +593,50 @@ async def save_location(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return SET_LANGUAGE
     
-    update_user(user_id, city=city)
+    db.update_user(user_id, city=city)
     
     await update.message.reply_text(
         f"✅ Location set to: {city}",
         reply_markup=get_settings_menu()
     )
-    return SET_LANGUAGE
+    return SET_LOCATION
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "❓ Help & Commands\n\n"
-        "• /start - Begin your anonymous chat journey\n"
-        "• /next - Skip to a new conversation\n"
-        "• /stop - Finish your current conversation\n"
+        "• /start - Begin anonymous chat journey\n"
+        "• /next - Skip to new conversation\n"
+        "• /stop - Finish current conversation\n"
         "• /menu - Access all features\n"
-        "• /bonus - Get your daily reward\n"
-        "• /profile - Manage your anonymous identity\n"
-        "• /premium - Learn about VIP benefits\n"
-        "• /rules - Read community guidelines\n"
-        "• /myprofile - See your rating and details\n"
+        "• /bonus - Get daily reward\n"
+        "• /profile - Manage anonymous identity\n"
+        "• /premium - VIP benefits info\n"
+        "• /rules - Community guidelines\n"
+        "• /myprofile - View rating and details\n"
         "• /complaint - Submit behavior report\n"
-        "• /language - Set your preferred language\n\n"
-        "📱 Use the menu buttons for easier navigation!",
+        "• /language - Set preferred language\n"
+        "• /help - Bot usage instructions\n\n"
+        "📱 Use menu buttons for easier navigation!",
         reply_markup=get_main_menu()
     )
     return MENU
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    partner_id = get_partner(user_id)
+    partner_id = db.get_partner(user_id)
     
     if partner_id:
-        # Forward message to partner
         await context.bot.send_message(
             chat_id=partner_id,
             text=update.message.text
         )
         return CHATTING
-    else:
-        await update.message.reply_text(
-            "⚠️ You're not currently in a chat. Use 'Begin Chat 🚀' to start.",
-            reply_markup=get_main_menu()
-        )
-        return MENU
+    
+    await update.message.reply_text(
+        "⚠️ You're not in a chat. Use 'Begin Chat 🚀' to start.",
+        reply_markup=get_main_menu()
+    )
+    return MENU
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -693,8 +646,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return MENU
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    logger.error("Exception while handling update:", exc_info=context.error)
-    
+    logger.error("Exception: %s", context.error, exc_info=True)
     if update.effective_message:
         await update.effective_message.reply_text(
             "⚠️ An error occurred. Please try again later.",
@@ -705,45 +657,48 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main() -> None:
     application = Application.builder().token(TOKEN).build()
     
+    # Add command handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("next", next_chat))
+    application.add_handler(CommandHandler("stop", stop_chat))
+    application.add_handler(CommandHandler("menu", menu))
+    application.add_handler(CommandHandler("bonus", bonus))
+    application.add_handler(CommandHandler("profile", myprofile))
+    application.add_handler(CommandHandler("premium", premium))
+    application.add_handler(CommandHandler("rules", rules))
+    application.add_handler(CommandHandler("myprofile", myprofile))
+    application.add_handler(CommandHandler("complaint", complaint))
+    application.add_handler(CommandHandler("language", language))
+    application.add_handler(CommandHandler("help", help_command))
+    
     # Conversation handler
     conv_handler = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
             MENU: [
-                MessageHandler(filters.Regex("^Begin Chat 🚀$"), begin_chat),
-                MessageHandler(filters.Regex("^Next Chat ⏭️$"), next_chat),
-                MessageHandler(filters.Regex("^Stop Chat ⛔$"), stop_chat),
-                MessageHandler(filters.Regex("^My Profile 👤$"), my_profile),
-                MessageHandler(filters.Regex("^Daily Bonus 🎁$"), daily_bonus),
-                MessageHandler(filters.Regex("^Premium 💎$"), premium),
-                MessageHandler(filters.Regex("^Settings ⚙️$"), settings),
-                MessageHandler(filters.Regex("^Help ❓$"), help_command),
-                CommandHandler("menu", menu),
-                CommandHandler("next", next_chat),
-                CommandHandler("stop", stop_chat),
-                CommandHandler("bonus", daily_bonus),
-                CommandHandler("profile", my_profile),
-                CommandHandler("premium", premium),
-                CommandHandler("rules", rules),
-                CommandHandler("myprofile", my_profile),
-                CommandHandler("complaint", complaint),
-                CommandHandler("language", language_command),
-                CommandHandler("help", help_command),
+                MessageHandler(filters.Regex(r"^Begin Chat 🚀$"), begin_chat),
+                MessageHandler(filters.Regex(r"^Next Chat ⏭️$"), next_chat),
+                MessageHandler(filters.Regex(r"^Stop Chat ⛔$"), stop_chat),
+                MessageHandler(filters.Regex(r"^My Profile 👤$"), myprofile),
+                MessageHandler(filters.Regex(r"^Daily Bonus 🎁$"), bonus),
+                MessageHandler(filters.Regex(r"^Premium 💎$"), premium),
+                MessageHandler(filters.Regex(r"^Settings ⚙️$"), settings),
+                MessageHandler(filters.Regex(r"^Help ❓$"), help_command),
             ],
             SET_LANGUAGE: [
-                CallbackQueryHandler(set_language, pattern="^lang_"),
-                MessageHandler(filters.Regex("^Language 🌐$"), language_command),
-                MessageHandler(filters.Regex("^Interests ❤️$"), set_interests),
-                MessageHandler(filters.Regex("^Location 📍$"), set_location),
-                MessageHandler(filters.Regex("^Back ↩️$"), menu),
+                CallbackQueryHandler(set_language, pattern=r"^lang_"),
+                MessageHandler(filters.Regex(r"^Language 🌐$"), language),
+                MessageHandler(filters.Regex(r"^Interests ❤️$"), set_interests),
+                MessageHandler(filters.Regex(r"^Location 📍$"), set_location),
+                MessageHandler(filters.Regex(r"^Back ↩️$"), menu),
             ],
             SET_INTERESTS: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, save_interests),
-                MessageHandler(filters.Regex("^Cancel$"), cancel),
+                MessageHandler(filters.Regex(r"^Cancel$"), cancel),
             ],
             SET_LOCATION: [
                 MessageHandler(filters.LOCATION | filters.TEXT, save_location),
-                MessageHandler(filters.Regex("^Cancel$"), cancel),
+                MessageHandler(filters.Regex(r"^Cancel$"), cancel),
             ],
             CHATTING: [
                 CommandHandler("next", next_chat),
@@ -752,18 +707,20 @@ def main() -> None:
             ],
             REPORT_USER: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_complaint),
-                MessageHandler(filters.Regex("^Cancel$"), cancel),
+                MessageHandler(filters.Regex(r"^Cancel$"), cancel),
             ],
             SET_RATING: [
-                CallbackQueryHandler(handle_rating, pattern="^rate_"),
+                CallbackQueryHandler(handle_rating, pattern=r"^rate_"),
             ],
         },
-        fallbacks=[CommandHandler("menu", menu), CommandHandler("cancel", cancel)],
+        fallbacks=[
+            CommandHandler("menu", menu),
+            CommandHandler("cancel", cancel),
+            CommandHandler("start", start)
+        ],
     )
     
     application.add_handler(conv_handler)
-    
-    # Error handler
     application.add_error_handler(error_handler)
     
     # Start the bot
