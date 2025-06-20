@@ -8,8 +8,7 @@ from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    ReplyKeyboardRemove,
-    ReplyKeyboardMarkup
+    ReplyKeyboardRemove
 )
 from telegram.ext import (
     Application,
@@ -31,7 +30,6 @@ VIP_OPTIONS = {
     5: (2000, 5)    # 2000💎 for 5 days
 }
 DIAMOND_REWARD_REFERRAL = 50
-DIAMOND_COST_PER_LIKE = 5
 USER_DATA_FILE = "users.json"
 COMPLAINTS_FILE = "complaints.json"
 RULES_FILE = "rules.txt"
@@ -61,9 +59,7 @@ LANGUAGES = {
 # Conversation states
 PHOTO, GENDER, AGE, LANGUAGE, BIO = range(5)
 FEEDBACK, COMPLAINT_TYPE, COMPLAINT_DETAILS = range(3)
-PROFILE_PREVIEW, CHATTING = range(2)
 PREFERENCES = 1
-VIP_PURCHASE = 2
 
 # Global data structures
 active_chats = {}
@@ -238,16 +234,13 @@ async def set_age(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await update.message.reply_text("Please enter a valid age between 18-99:")
         return AGE
     
-    language_buttons = [
-        [InlineKeyboardButton(name, callback_data=code)]
-        for code, name in LANGUAGES.items()
-    ]
-    # Split buttons into multiple rows for better display
-    keyboard = [language_buttons[i:i+3] for i in range(0, len(language_buttons), 3)]
+    language_buttons = []
+    for code, name in LANGUAGES.items():
+        language_buttons.append([InlineKeyboardButton(name, callback_data=code)])
     
     await update.message.reply_text(
         "Select your preferred language:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+        reply_markup=InlineKeyboardMarkup(language_buttons)
     )
     return LANGUAGE
 
@@ -328,7 +321,6 @@ async def start_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Find compatible partner based on preferences
     partner_id = None
     for uid in waiting_users:
-        uid = int(uid)
         if uid == user_id:
             continue
             
@@ -368,8 +360,7 @@ async def start_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
         waiting_users.append(user_id)
         await update.message.reply_text("⏳ Searching for a compatible chat partner...")
 
-async def show_partner_profile(update: Update, context: ContextTypes.DEFAULT_TYPE, partner_id):
-    user_id = update.effective_user.id
+async def show_partner_profile(bot, user_id, partner_id):
     partner = user_data.get(str(partner_id), {})
     
     caption = f"💎 Diamonds: {partner.get('diamonds', 0)}"
@@ -391,7 +382,7 @@ async def show_partner_profile(update: Update, context: ContextTypes.DEFAULT_TYP
         [InlineKeyboardButton("✅ Start Chat", callback_data=f"startchat_{partner_id}")]
     ]
     
-    await context.bot.send_photo(
+    await bot.send_photo(
         chat_id=user_id,
         photo=partner["photo_id"],
         caption=caption,
@@ -594,7 +585,6 @@ async def vip_access(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "- Priority matching\n"
         "- Increased diamond rewards",
         reply_markup=InlineKeyboardMarkup(keyboard))
-    )
 
 async def handle_vip_purchase(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -675,45 +665,6 @@ async def set_preferences(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Current gender preference: {user.get('search_gender', 'any').capitalize()}\n"
         f"Current age range: {user.get('min_age', 18)}-{user.get('max_age', 99)}",
         reply_markup=InlineKeyboardMarkup(keyboard))
-    )
-    return PREFERENCES
-
-async def handle_preferences(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    data = query.data.split('_')
-    pref_type = data[1]
-    value = data[2]
-    user_id = query.from_user.id
-    
-    if pref_type == "gender":
-        user_data[str(user_id)]["search_gender"] = value
-        save_data()
-        await query.edit_message_text(
-            f"✅ Gender preference set to: {value.capitalize()}\n"
-            "Now send your preferred age range in format: min-max\n"
-            "Example: 18-30"
-        )
-        return PREFERENCES
-    elif pref_type == "age":
-        try:
-            min_age, max_age = map(int, value.split('-'))
-            if min_age < 18 or max_age > 99 or min_age > max_age:
-                raise ValueError
-            user_data[str(user_id)]["min_age"] = min_age
-            user_data[str(user_id)]["max_age"] = max_age
-            save_data()
-            await query.edit_message_text(
-                f"✅ Age range set to: {min_age}-{max_age}"
-            )
-            await show_menu(query, context)
-            return ConversationHandler.END
-        except:
-            await query.edit_message_text(
-                "Invalid format. Please send min and max ages separated by hyphen\n"
-                "Example: 21-35"
-            )
-            return PREFERENCES
 
 # Help and rules
 async def show_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -745,13 +696,7 @@ async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Menu and commands
 async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if isinstance(update, Update):
-        user_id = update.effective_user.id
-        msg = update.message
-    else:
-        # It's a CallbackQuery
-        user_id = update.from_user.id
-        msg = update
+    user_id = update.effective_user.id
     
     keyboard = [
         [InlineKeyboardButton("Start Chat", callback_data="start_chat")],
@@ -762,15 +707,10 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Help", callback_data="help")]
     ]
     
-    if hasattr(msg, 'edit_message_text'):
-        await msg.edit_message_text(
-            text="Main Menu:",
-            reply_markup=InlineKeyboardMarkup(keyboard))
-    else:
-        await context.bot.send_message(
-            chat_id=user_id,
-            text="Main Menu:",
-            reply_markup=InlineKeyboardMarkup(keyboard))
+    await context.bot.send_message(
+        chat_id=user_id,
+        text="Main Menu:",
+        reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def my_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -801,20 +741,19 @@ async def my_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("Back to Menu", callback_data="back_menu")]
     ]
     
-    if update.callback_query:
-        await update.callback_query.answer()
-        await update.callback_query.edit_message_caption(
-            caption=caption,
-            reply_markup=InlineKeyboardMarkup(keyboard))
-    else:
-        await update.message.reply_photo(
-            photo=user["photo_id"],
-            caption=caption,
-            reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_photo(
+        photo=user["photo_id"],
+        caption=caption,
+        reply_markup=InlineKeyboardMarkup(keyboard))
 
 # Main function
 def main() -> None:
     load_data()
+    
+    # Check if token exists
+    if not TOKEN:
+        logging.error("TELEGRAM_BOT_TOKEN environment variable missing!")
+        return
     
     application = Application.builder().token(TOKEN).build()
     
@@ -886,7 +825,9 @@ def main() -> None:
         handle_chat_message
     ))
     
+    # Start the bot
     application.run_polling()
+    logging.info("Bot started successfully")
 
 if __name__ == "__main__":
     main()
