@@ -39,48 +39,16 @@ LANG_CODES = {
 
 MESSAGES = {
     "welcome_new": {
-        "en": "👤 Profile created! Use /menu to begin. Your name: {name}",
-        "hi": "👤 प्रोफ़ाइल बन गई! शुरू करने के लिए /menu का उपयोग करें। आपका नाम: {name}",
-        "bn": "👤 প্রোফাইল তৈরি হয়েছে! শুরু করতে /menu ব্যবহার করুন। আপনার নাম: {name}",
-        "es": "👤 ¡Perfil creado! Usa /menu para comenzar. Tu nombre: {name}",
-        "de": "👤 Profil erstellt! Benutze /menu, um zu beginnen. Dein Name: {name}",
-        "fr": "👤 Profil créé ! Utilisez /menu pour commencer. Votre nom : {name}",
-        "ar": "👤 تم إنشاء الملف الشخصي! استخدم /menu للبدء. اسمك: {name}",
-        "ru": "👤 Профиль создан! Используйте /menu для начала. Ваше имя: {name}",
-        "id": "👤 Profil dibuat! Gunakan /menu untuk memulai. Nama Anda: {name}"
+        "en": "👤 Profile created! Use /menu to begin. Your name: {name}"
     },
     "welcome_back": {
-        "en": "👋 Welcome back! Use /menu to explore features.",
-        "hi": "👋 वापसी पर स्वागत है! सुविधाओं को देखने के लिए /menu का उपयोग करें।",
-        "bn": "👋 আবার স্বাগতম! বৈশিষ্ট্যগুলি দেখতে /menu ব্যবহার করুন।",
-        "es": "👋 ¡Bienvenido de nuevo! Usa /menu para explorar las funciones.",
-        "de": "👋 Willkommen zurück! Benutze /menu, um die Funktionen zu entdecken.",
-        "fr": "👋 Bon retour ! Utilisez /menu pour explorer les fonctionnalités.",
-        "ar": "👋 مرحبًا بعودتك! استخدم /menu لاستكشاف الميزات.",
-        "ru": "👋 С возвращением! Используйте /menu, чтобы изучить функции.",
-        "id": "👋 Selamat datang kembali! Gunakan /menu untuk menjelajahi fitur."
+        "en": "👋 Welcome back! Use /menu to explore features."
     },
     "choose_language": {
-        "en": "🌐 Choose your language:",
-        "hi": "🌐 अपनी भाषा चुनें:",
-        "bn": "🌐 আপনার ভাষা নির্বাচন করুন:",
-        "es": "🌐 Elige tu idioma:",
-        "de": "🌐 Wähle deine Sprache:",
-        "fr": "🌐 Choisissez votre langue :",
-        "ar": "🌐 اختر لغتك:",
-        "ru": "🌐 Выберите ваш язык:",
-        "id": "🌐 Pilih bahasa Anda:"
+        "en": "🌐 Choose your language:"
     },
     "language_set": {
-        "en": "✅ Language set to {lang}.",
-        "hi": "✅ भाषा {lang} पर सेट हो गई है।",
-        "bn": "✅ ভাষা {lang} এ সেট করা হয়েছে।",
-        "es": "✅ Idioma establecido en {lang}.",
-        "de": "✅ Sprache auf {lang} gesetzt.",
-        "fr": "✅ Langue définie sur {lang}.",
-        "ar": "✅ تم تعيين اللغة إلى {lang}.",
-        "ru": "✅ Язык установлен на {lang}.",
-        "id": "✅ Bahasa diatur ke {lang}."
+        "en": "✅ Language set to {lang}."
     }
 }
 
@@ -91,117 +59,84 @@ def translate(user_id, key, **kwargs):
     text = MESSAGES.get(key, {}).get(code, MESSAGES.get(key, {}).get("en", ""))
     return text.format(**kwargs)
 
-def auto_translate(text, source_lang, target_lang):
-    try:
-        return GoogleTranslator(source=source_lang, target=target_lang).translate(text)
-    except:
-        return text
-
-def create_profile(user_id):
-    now = datetime.datetime.utcnow().isoformat()
-    anon_name = f"anon_{str(user_id)[-4:]}"
-    users[str(user_id)] = {
-        "anon_name": anon_name,
-        "points": 0,
-        "vip": False,
-        "vip_expiry": "",
-        "last_reward": "",
-        "language": "English",
-        "partner": None,
-        "rating": 5,
-        "joined": now,
-        "interests": [],
-        "gender": "", "age": "", "country": "", "distance": "",
-        "referrals": 0, "ref_code": str(user_id)
-    }
-    save_data(users)
-    return anon_name
-
-def check_vip_expiry(user_id):
-    u = users.get(str(user_id))
-    if u and u.get("vip") and u.get("vip_expiry"):
-        expiry = datetime.datetime.fromisoformat(u["vip_expiry"])
-        if datetime.datetime.utcnow() > expiry:
-            u["vip"] = False
-            u["vip_expiry"] = ""
-            save_data(users)
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    args = context.args
-    is_new = str(user_id) not in users
-    if is_new:
-        anon_name = create_profile(user_id)
-        if args:
-            ref = args[0]
-            if ref != str(user_id) and ref in users:
-                users[ref]["points"] += 5
-                users[ref]["referrals"] += 1
-                save_data(users)
-        message = translate(user_id, "welcome_new", name=anon_name)
+    user_id = str(update.effective_user.id)
+    if user_id not in users:
+        name = update.effective_user.first_name
+        users[user_id] = {"name": name, "language": "English", "points": 0, "vip": False}
+        save_data(users)
+        await update.message.reply_text(translate(user_id, "welcome_new", name=name))
     else:
-        message = translate(user_id, "welcome_back")
-
-    await update.message.reply_text(message)
+        await update.message.reply_text(translate(user_id, "welcome_back"))
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    keyboard = [
-        [InlineKeyboardButton("🎯 Referral", callback_data="menu_ref"), InlineKeyboardButton("🏆 Leaderboard", callback_data="menu_leader")],
-        [InlineKeyboardButton("📸 Photo Roulette", callback_data="menu_photo"), InlineKeyboardButton("💠 VIP Features", callback_data="menu_premium")],
-        [InlineKeyboardButton("⚙️ Settings", callback_data="menu_settings")]
-    ]
-    await update.message.reply_text("📋 *Main Menu:*", reply_markup=InlineKeyboardMarkup(keyboard), parse_mode="Markdown")
+    keyboard = [[
+        InlineKeyboardButton("📢 Referral", callback_data="referral"),
+        InlineKeyboardButton("🏆 Leaderboard", callback_data="leaderboard")
+    ], [
+        InlineKeyboardButton("📸 Photo Roulette", callback_data="photo"),
+        InlineKeyboardButton("🎁 Bonus", callback_data="bonus")
+    ], [
+        InlineKeyboardButton("💎 VIP Features", callback_data="vip"),
+        InlineKeyboardButton("⚙️ Settings", callback_data="settings")
+    ]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text("📋 Main Menu:", reply_markup=reply_markup)
 
-async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    user_id = query.from_user.id
-    setting = query.data.replace("setting_", "")
-    if setting == "back":
-        await menu(update, context)
-        return
-
-    if setting == "language":
-        keyboard = [[InlineKeyboardButton(lang, callback_data=f"lang_{lang}")] for lang in LANGUAGES]
-        await query.message.reply_text(translate(user_id, "choose_language"), reply_markup=InlineKeyboardMarkup(keyboard))
-    else:
-        pending_settings[user_id] = setting
-        await query.message.reply_text(f"✍️ Please type your {setting}.")
     await query.answer()
+    data = query.data
+    if data == "referral":
+        await query.edit_message_text("🔗 Share your referral link: t.me/anonxconnect_bot?start=" + str(query.from_user.id))
+    elif data == "leaderboard":
+        top = sorted(users.items(), key=lambda x: x[1].get("points", 0), reverse=True)[:5]
+        message = "🏆 Leaderboard:\n"
+        for i, (uid, info) in enumerate(top, 1):
+            message += f"{i}. {info.get('name')} - {info.get('points', 0)} 💎\n"
+        await query.edit_message_text(message)
+    elif data == "photo":
+        await query.edit_message_text("📸 Photo Roulette feature coming soon!")
+    elif data == "bonus":
+        uid = str(query.from_user.id)
+        today = str(datetime.date.today())
+        if users[uid].get("last_bonus") != today:
+            users[uid]["points"] = users[uid].get("points", 0) + 1
+            users[uid]["last_bonus"] = today
+            save_data(users)
+            await query.edit_message_text("🎁 You received 1 💎 point today!")
+        else:
+            await query.edit_message_text("⏳ You already claimed your daily bonus!")
+    elif data == "vip":
+        await query.edit_message_text("💎 VIP Features:\n- No ads\n- Language Translation\n- Gender Match\n- More coming soon!")
+    elif data == "settings":
+        await query.edit_message_text("⚙️ Choose what to change: Language, Gender, Country, Age, Interests, Distance")
 
-async def set_language(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = str(query.from_user.id)
-    lang = query.data.replace("lang_", "")
-    users[user_id]["language"] = lang
-    save_data(users)
-    await query.message.reply_text(translate(user_id, "language_set", lang=lang))
-    await query.answer()
+# Placeholder functions
+def stop(update, context): pass
+def next_chat(update, context): pass
+def show_profile(update, context): pass
+def daily_bonus(update, context): pass
+def activate_vip(update, context): pass
+def choose_language(update, context): pass
+def show_rules(update, context): pass
+def handle_message(update, context): pass
 
-async def referral(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    user = users.get(str(user_id))
-    referral_link = f"https://t.me/anonxconnect_bot?start={user['ref_code']}"
-    await update.message.reply_text(f"🔗 Your referral link:\n{referral_link}\n\nYou’ve referred: {user['referrals']} users")
+# Bot Execution
+app = ApplicationBuilder().token(TOKEN).build()
 
-async def leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    sorted_users = sorted(users.items(), key=lambda x: x[1].get("points", 0), reverse=True)
-    text = "🏆 Top Referrals & Points:\n"
-    for i, (uid, info) in enumerate(sorted_users[:10], start=1):
-        text += f"{i}. {info['anon_name']} - {info['points']} pts\n"
-    await update.message.reply_text(text)
+# Command Handlers
+app.add_handler(CommandHandler("start", start))               # Start anonymous chat
+app.add_handler(CommandHandler("stop", stop))                 # End current chat
+app.add_handler(CommandHandler("next", next_chat))            # Skip to next partner
+app.add_handler(CommandHandler("menu", menu))                 # Main menu (Referral, Leaderboard, Photo, Bonus, Settings)
+app.add_handler(CommandHandler("profile", show_profile))      # Show your profile
+app.add_handler(CommandHandler("bonus", daily_bonus))         # Daily 💎 bonus
+app.add_handler(CommandHandler("premium", activate_vip))      # VIP activation
+app.add_handler(CommandHandler("language", choose_language))  # Set preferred language
+app.add_handler(CommandHandler("rules", show_rules))          # Read bot rules
 
-async def photo_roulette(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📸 Coming soon! You'll be able to share and guess photos anonymously.")
+app.add_handler(CallbackQueryHandler(handle_callback))
+app.add_handler(MessageHandler(filters.TEXT, handle_message))
 
-if __name__ == '__main__':
-    app = ApplicationBuilder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("menu", menu))
-    app.add_handler(CommandHandler("referral", referral))
-    app.add_handler(CommandHandler("leaderboard", leaderboard))
-    app.add_handler(CommandHandler("photo", photo_roulette))
-    app.add_handler(CallbackQueryHandler(settings_callback, pattern="^setting_"))
-    app.add_handler(CallbackQueryHandler(set_language, pattern="^lang_"))
-
-    app.run_polling()
+app.run_polling()
