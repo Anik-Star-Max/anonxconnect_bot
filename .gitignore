@@ -194,3 +194,8 @@ cython_debug/
 .cursorindexingignore
 # Secrets
 .env
+__pycache__/
+*.py[cod]
+env/
+venv/
+
