@@ -674,7 +674,7 @@ async def set_preferences(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Set your chat preferences:\n"
         f"Current gender preference: {user.get('search_gender', 'any').capitalize()}\n"
         f"Current age range: {user.get('min_age', 18)}-{user.get('max_age', 99)}",
-        reply_markup=InlineKeyboardMarkup(keyboard))
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
     return PREFERENCES
 
