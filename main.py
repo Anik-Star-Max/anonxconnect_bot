@@ -779,14 +779,14 @@ async def my_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = user_data.get(str(user_id), {})
     
     caption = (
-        f"👤 Your Profile\n"
-        f"💎 Diamonds: {user.get('diamonds', 0)}\n"
-        f"❤️ Likes: {user.get('likes', 0)}\n"
-        f"👎 Dislikes: {user.get('dislikes', 0)}\n"
-        f"🔤 Language: {LANGUAGES.get(user.get('language', 'en'), 'English'}\n"
-        f"⚧️ Gender: {user.get('gender', 'Not set').capitalize()}\n"
-        f"🔢 Age: {user.get('age', 'Not set')}\n"
-        f"📝 Bio: {user.get('bio', 'Not set')}\n"
+    f"👤 Your Profile\n"
+    f"💎 Diamonds: {user.get('diamonds', 0)}\n"
+    f"❤️ Likes: {user.get('likes', 0)}\n"
+    f"👎 Dislikes: {user.get('dislikes', 0)}\n"
+    f"🔤 Language: {LANGUAGES.get(user.get('language', 'en'), 'English')}\n"
+    f"⚧️ Gender: {user.get('gender', 'Not set').capitalize()}\n"
+    f"🔢 Age: {user.get('age', 'Not set')}\n"
+    f"📝 Bio: {user.get('bio', 'Not set')}\n"
     )
     
     if is_vip(user_id):
