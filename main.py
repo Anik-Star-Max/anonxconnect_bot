@@ -377,12 +377,12 @@ async def show_partner_profile(update: Update, context: ContextTypes.DEFAULT_TYP
     # VIP users see more details
     if is_vip(user_id):
         caption += (
-            f"\n👤 Gender: {partner.get('gender', 'Not set').capitalize()}"
-            f"\n🔢 Age: {partner.get('age', 'Not set')}"
-            f"\n🌐 Language: {LANGUAGES.get(partner.get('language', 'en'), 'English'}"
-            f"\n📝 Bio: {partner.get('bio', 'Not set')}"
-        )
-    
+             f"👤 Partner Info:\n"
+    f"🧑 Gender: {partner.get('gender', 'Not set')}\n"
+    f"🌐 Language: {partner.get('language', 'Not set')}\n"
+    f"📝 Bio: {partner.get('bio', 'Not set')}"
+)
+   
     keyboard = [
         [
             InlineKeyboardButton("👍 Like", callback_data=f"like_{partner_id}"),
