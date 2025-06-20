@@ -21,6 +21,63 @@ from telegram.ext import (
     filters
 )
 from dotenv import load_dotenv
+from telegram.error import InvalidToken
+
+# Load environment variables
+load_dotenv()
+
+# Bot configuration
+TOKEN = os.getenv('TELEGRAM_TOKEN')
+ADMIN_USERNAME = os.getenv('ADMIN_USERNAME', '@mysteryman02')
+DATABASE_NAME = "anonxconnect.db"
+BOT_NAME = "Anonymous Connect"
+
+# Validate token
+if not TOKEN:
+    raise InvalidToken("""
+    TELEGRAM_TOKEN environment variable is not set!
+    Please set it with your bot token from @BotFather.
+    
+    If using Railway:
+    1. Go to your project → Settings → Variables
+    2. Add TELEGRAM_TOKEN with value: 8117045817:AAEIWRAV3iDt97-Cu0lMoEAvte1n4i4wNUw
+    
+    If running locally:
+    Create .env file with:
+    TELEGRAM_TOKEN=8117045817:AAEIWRAV3iDt97-Cu0lMoEAvte1n4i4wNUw
+    """)
+
+# Enable logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Rest of your code remains the same...
+import os
+import logging
+import sqlite3
+import random
+from datetime import datetime, timedelta
+from telegram import (
+    Update,
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton
+)
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    ConversationHandler,
+    filters
+)
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
