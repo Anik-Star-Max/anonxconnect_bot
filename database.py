@@ -106,9 +106,17 @@ class Database:
         return None
     
     def cleanup_inactive_users(self):
-        now = datetime.now()
-        for user_id, user in list(self.users.items()):
-            if user['waiting']:
-                last_active = datetime.fromisoformat(user['last_active'])
-                if (now - last_active).seconds > INACTIVITY_TIMEOUT:
-                    self.update_user(user_id, waiting=False)
+    now = datetime.now()
+    inactive_count = 0
+    for user_id, user_data in list(self.users.items()):
+        if user_data.get('waiting') or user_data.get('partner'):
+            try:
+                last_active = datetime.fromisoformat(user_data['last_active'])
+                if (now - last_active).seconds > self.inactivity_timeout:
+                    # Reset user status
+                    self.update_user(user_id, waiting=False, partner=None)
+                    inactive_count += 1
+            except Exception as e:
+                logger.error(f"Cleanup error for {user_id}: {str(e)}")
+    logger.info(f"Cleaned up {inactive_count} inactive users")
+    return inactive_count
