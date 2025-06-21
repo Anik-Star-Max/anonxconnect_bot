@@ -166,7 +166,7 @@ async def photo_roulette_menu(update: Update, context: CallbackContext):
         f"Your photos: {len(photos)}\n"
         f"Total likes: {sum(photo.get('likes', 0) for photo in photos)}\n"
         f"Earned: {sum(photo.get('likes', 0) * config.PHOTO_LIKE_REWARD} 💎\n\n"
-        "Add photos to get likes and earn diamonds!"
+        "Add photos to get likes and earn diamonds)!"
     )
     
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
