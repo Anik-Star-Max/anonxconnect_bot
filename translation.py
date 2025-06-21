@@ -1,12 +1,12 @@
 from deep_translator import GoogleTranslator
 
-def translate_text(text, source_lang, target_lang):
+def translate_text(text, source='auto', target='en'):
     try:
-        return GoogleTranslator(source=source_lang, target=target_lang).translate(text)
+        return GoogleTranslator(source=source, target=target).translate(text)
     except:
         return text
 
-def translate_message(text, from_lang, to_lang):
-    if from_lang == to_lang:
+def translate_message(text, source_lang, target_lang):
+    if source_lang == target_lang:
         return text
-    return translate_text(text, from_lang, to_lang)
+    return translate_text(text, source_lang, target_lang)
