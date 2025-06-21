@@ -1,7 +1,4 @@
 python-telegram-bot==20.7
 deep-translator==1.11.4
-apscheduler==3.10.1
-python-dotenv==1.0.0
-ujson==5.10.0
-emoji==2.11.0
-
+requests==2.31.0
+json5==0.9.14
