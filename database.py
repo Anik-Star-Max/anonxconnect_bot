@@ -1,113 +1,139 @@
 import json
 import os
-from datetime import datetime, timedelta
-import logging
-
-logger = logging.getLogger(__name__)
+from datetime import datetime
 
 class Database:
     def __init__(self):
-        self.users = self._load_data('users.json')
-        self.complaints = self._load_data('complaints.json')
-    
-    def _load_data(self, filename):
-        """Safely load JSON data"""
+        self.users = self.load_data('users.json')
+        self.photos = self.load_data('photos.json')
+        self.referrals = self.load_data('referrals.json')
+        self.top_referrals = []
+        
+    def load_data(self, filename):
         if os.path.exists(filename):
             try:
                 with open(filename, 'r') as f:
                     return json.load(f)
-            except Exception as e:
-                logger.error(f"Error loading {filename}: {str(e)}")
+            except:
                 return {}
         return {}
     
-    def _save_data(self, data, filename):
-        """Safely save data to file"""
-        try:
-            with open(filename, 'w') as f:
-                json.dump(data, f, indent=2)
-            return True
-        except Exception as e:
-            logger.error(f"Error saving {filename}: {str(e)}")
-            return False
+    def save_data(self, data, filename):
+        with open(filename, 'w') as f:
+            json.dump(data, f, indent=2)
     
     def save_users(self):
-        return self._save_data(self.users, 'users.json')
+        self.save_data(self.users, 'users.json')
     
-    def save_complaints(self):
-        return self._save_data(self.complaints, 'complaints.json')
+    def save_photos(self):
+        self.save_data(self.photos, 'photos.json')
     
-    def add_user(self, user_id, name):
+    def save_referrals(self):
+        self.save_data(self.referrals, 'referrals.json')
+    
+    def add_user(self, user_id, name, bonus=0):
         user_id = str(user_id)
         if user_id not in self.users:
             self.users[user_id] = {
                 'name': name,
-                'gender': None,
-                'age': None,
-                'vip': {'expiry': None, 'diamonds': 0},
+                'diamonds': bonus,
+                'referrals': 0,
+                'chats': 0,
+                'rating': 0,
                 'language': 'en',
                 'partner': None,
-                'banned': False,
-                'reported_count': 0,
                 'waiting': False,
-                'last_active': datetime.now().isoformat()
+                'vip_expiry': None,
+                'last_active': datetime.now().isoformat(),
+                'public_profile': True,
+                'translate_enabled': True,
+                'photos': []
             }
-            return self.save_users()
-        return False
-    
-    def update_user(self, user_id, **kwargs):
-        user_id = str(user_id)
-        if user_id in self.users:
-            user = self.users[user_id]
-            for key, value in kwargs.items():
-                if key == 'diamonds':
-                    user['vip']['diamonds'] = value
-                elif key == 'vip_expiry':
-                    user['vip']['expiry'] = value
-                else:
-                    user[key] = value
-            user['last_active'] = datetime.now().isoformat()
-            return self.save_users()
-        return False
+            self.save_users()
     
     def get_user(self, user_id):
         return self.users.get(str(user_id))
     
-    def is_vip(self, user_id):
+    def update_user(self, user_id, **kwargs):
         user = self.get_user(user_id)
-        if user and not user.get('banned', False):
-            expiry = user['vip'].get('expiry')
-            if expiry:
-                try:
-                    return datetime.fromisoformat(expiry) > datetime.now()
-                except:
-                    return False
+        if user:
+            for key, value in kwargs.items():
+                user[key] = value
+            user['last_active'] = datetime.now().isoformat()
+            self.save_users()
+            return True
         return False
     
-    def find_match(self, user_id):
-        current_user = self.get_user(user_id)
-        if not current_user or current_user.get('banned', False) or current_user.get('partner'):
-            return None
+    def is_vip(self, user_id):
+        user = self.get_user(user_id)
+        if not user:
+            return False
         
-        for partner_id, partner in self.users.items():
-            if (partner_id != str(user_id) and 
-                partner.get('waiting') and 
-                not partner.get('banned', False) and 
-                not partner.get('partner')):
-                return partner_id
-        return None
+        # Admin has permanent VIP
+        if int(user_id) == config.ADMIN_ID:
+            return True
+        
+        expiry = user.get('vip_expiry')
+        if expiry and datetime.fromisoformat(expiry) > datetime.now():
+            return True
+        return False
     
-    def cleanup_inactive_users(self):
-        now = datetime.now()
-        count = 0
-        for user_id, user in list(self.users.items()):
-            if user.get('waiting') or user.get('partner'):
-                try:
-                    last_active = datetime.fromisoformat(user['last_active'])
-                    if (now - last_active).total_seconds() > 300:  # 5 minutes
-                        self.update_user(user_id, waiting=False, partner=None)
-                        count += 1
-                except:
-                    # Reset if timestamp is invalid
-                    self.update_user(user_id, last_active=now.isoformat())
-        return count
+    def add_photo(self, user_id, photo_id):
+        user_id = str(user_id)
+        if user_id not in self.photos:
+            self.photos[user_id] = []
+        
+        if len(self.photos[user_id]) < config.MAX_PHOTOS_PER_USER:
+            self.photos[user_id].append({
+                'id': photo_id,
+                'likes': 0,
+                'timestamp': datetime.now().isoformat()
+            })
+            self.save_photos()
+            return True
+        return False
+    
+    def like_photo(self, photo_user_id, photo_index):
+        photo_user_id = str(photo_user_id)
+        if photo_user_id in self.photos and photo_index < len(self.photos[photo_user_id]):
+            self.photos[photo_user_id][photo_index]['likes'] += 1
+            self.save_photos()
+            
+            # Reward user
+            user = self.get_user(photo_user_id)
+            if user:
+                user['diamonds'] = user.get('diamonds', 0) + config.PHOTO_LIKE_REWARD
+                self.save_users()
+            return True
+        return False
+    
+    def add_referral(self, referrer_id, referred_id):
+        referral_id = f"{referrer_id}_{referred_id}"
+        if referral_id not in self.referrals:
+            self.referrals[referral_id] = {
+                'referrer': referrer_id,
+                'referred': referred_id,
+                'timestamp': datetime.now().isoformat()
+            }
+            self.save_referrals()
+            
+            # Update user stats
+            referrer = self.get_user(referrer_id)
+            if referrer:
+                referrer['referrals'] = referrer.get('referrals', 0) + 1
+                referrer['diamonds'] = referrer.get('diamonds', 0) + config.REFERRAL_BONUS
+                self.save_users()
+            return True
+        return False
+    
+    def get_top_referrals(self):
+        # Calculate top referrals
+        referrals = {}
+        for user_id, user in self.users.items():
+            if user.get('public_profile', True):
+                referrals[user_id] = user.get('referrals', 0)
+        
+        # Sort by referral count
+        sorted_referrals = sorted(referrals.items(), key=lambda x: x[1], reverse=True)
+        self.top_referrals = sorted_referrals[:config.REFERRAL_TOP_COUNT]
+        return self.top_referrals
