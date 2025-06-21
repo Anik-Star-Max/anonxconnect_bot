@@ -35,19 +35,19 @@ async def help_command(update: Update, context: CallbackContext):
 async def echo(update: Update, context: CallbackContext):
     await update.message.reply_text(f"📨 You said: {update.message.text}")
 
-def signal_handler(signum, frame):
-    """Handle OS signals for graceful shutdown"""
-    logger.info(f"Received signal {signum}, shutting down...")
-    if app:
-        asyncio.create_task(shutdown())
-
 async def shutdown():
     """Gracefully shutdown the application"""
-    logger.info("Starting graceful shutdown...")
-    await app.stop()
-    await app.shutdown()
-    logger.info("Shutdown complete")
-    asyncio.get_running_loop().stop()
+    if app:
+        logger.info("Starting graceful shutdown...")
+        await app.stop()
+        await app.shutdown()
+        logger.info("Shutdown complete")
+        asyncio.get_running_loop().stop()
+
+async def handle_signal(signal_name):
+    """Handle OS signals"""
+    logger.info(f"Received OS signal: {signal_name}")
+    await shutdown()
 
 async def main():
     global app
@@ -60,10 +60,10 @@ async def main():
         
         # Register signal handlers
         loop = asyncio.get_running_loop()
-        for signame in {'SIGINT', 'SIGTERM'}:
+        for signame in [signal.SIGINT, signal.SIGTERM]:
             loop.add_signal_handler(
-                getattr(signal, signame),
-                lambda: asyncio.create_task(shutdown())
+                signame,
+                lambda s=signame: asyncio.create_task(handle_signal(s))
             )
         
         # Start polling
