@@ -1,49 +1,43 @@
-
-import os
 import asyncio
 import logging
 from telegram.ext import Application
-from handlers import setup_handlers
-from database import Database
+import config
 
-# Setup logging
+# Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
 
-# Load environment variables
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID"))
+async def start(update, context):
+    """Handler for /start command"""
+    await update.message.reply_text("🚀 Bot is working! Send /help for commands")
+
+async def help_command(update, context):
+    """Handler for /help command"""
+    await update.message.reply_text(
+        "Available commands:\n"
+        "/start - Start the bot\n"
+        "/help - Show this help message"
+    )
 
 async def main():
-    """Main application entry point"""
-    # Initialize database
-    db = Database()
-    
-    # Create bot application
-    application = Application.builder().token(BOT_TOKEN).build()
-    
-    # Store database in bot context
-    application.bot_data['db'] = db
-    
-    # Setup handlers
-    setup_handlers(application)
-    
-    # Start the bot
-    logger.info("Starting bot...")
-    await application.initialize()
-    await application.start()
-    logger.info("Bot started successfully")
-    
-    # Run until stopped
-    await asyncio.Event().wait()
+    """Main application function"""
+    try:
+        # Create application
+        application = Application.builder().token(config.BOT_TOKEN).build()
+        
+        # Add handlers
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("help", help_command))
+        
+        # Start polling
+        logger.info("Starting bot in polling mode...")
+        await application.run_polling()
+        
+    except Exception as e:
+        logger.critical(f"Fatal error: {str(e)}")
 
 if __name__ == '__main__':
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user")
-    except Exception as e:
-        logger.critical(f"Critical error: {str(e)}")
+    asyncio.run(main())
