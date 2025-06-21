@@ -194,11 +194,12 @@ cython_debug/
 .cursorindexingignore
 # Environment files
 .env
-.env.local
+config.py
 
 # Sensitive data
-config.py
-*.json
+users.json
+photos.json
+referrals.json
 
 # Python cache
 __pycache__/
