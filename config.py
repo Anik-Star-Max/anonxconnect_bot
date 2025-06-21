@@ -1,46 +1,43 @@
 import os
 
-# Core Configuration
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
-BOT_USERNAME = os.getenv("BOT_USERNAME", "your_bot_username")
+# Bot configuration
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+ADMIN_ID = int(os.getenv('ADMIN_ID', '0'))  # Replace with actual admin ID
+BOT_USERNAME = os.getenv('BOT_USERNAME', 'YourBotUsername')
 
-# VIP System
-VIP_PRICES = {
-    1: 500,   # 1 day
-    7: 2000,  # 1 week
-    30: 5000, # 1 month
-    365: 15000 # 1 year
+# VIP packages (days: diamonds cost)
+VIP_PACKAGES = {
+    1: 500,    # 1 day = 500 diamonds
+    2: 1000,   # 2 days = 1000 diamonds
+    3: 1500,   # 3 days = 1500 diamonds
+    5: 2000    # 5 days = 2000 diamonds
 }
 
-# Admin Privileges
-ADMIN_VIP_EXPIRY = "2100-01-01T00:00:00"
-ADMIN_DIAMONDS = 1000000  # Unlimited diamonds
+# Daily bonus diamonds
+DAILY_BONUS = 50
 
-# Referral System
-REFERRAL_BONUS = 200  # Diamonds per successful referral
-REFERRAL_TOP_COUNT = 10  # Top 10 referrals
-
-# Photo Roulette
-MAX_PHOTOS_PER_USER = 5
-PHOTO_LIKE_REWARD = 50  # Diamonds per like
-
-# Supported Languages
+# Supported languages for translation
 SUPPORTED_LANGUAGES = {
     'en': 'English',
     'es': 'Spanish',
     'fr': 'French',
     'de': 'German',
+    'it': 'Italian',
     'ru': 'Russian',
-    'zh': 'Chinese',
-    'hi': 'Hindi',
     'ar': 'Arabic',
+    'hi': 'Hindi',
+    'zh': 'Chinese',
+    'ja': 'Japanese',
+    'ko': 'Korean',
     'pt': 'Portuguese',
-    'ja': 'Japanese'
+    'tr': 'Turkish',
+    'nl': 'Dutch',
+    'sv': 'Swedish'
 }
 
-# Inactivity Timeout (minutes)
-INACTIVITY_TIMEOUT = 15
+# Photo roulette settings
+MAX_PHOTOS_PER_USER = 5
+PHOTO_LIKE_REWARD = 10  # Diamonds reward for getting likes
 
-if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN environment variable is required!")
+# Referral system
+REFERRAL_BONUS = 100  # Diamonds for successful referral
