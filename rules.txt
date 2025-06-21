@@ -1,10 +1,77 @@
-📜 Community Rules & Guidelines
+🌟 ANONYMOUS CHAT BOT - COMMUNITY RULES 🌟
 
-1. Respect all users - No harassment or hate speech
-2. Privacy first - Never share personal information
-3. No explicit content - Keep conversations appropriate
-4. No spamming - Respect chat partners
-5. One account per person - No multiple accounts
+Welcome to our anonymous chat platform! To ensure a safe and enjoyable experience for everyone, please follow these rules:
 
-Violations will result in permanent banning.
-Admin decisions are final.
+📋 GENERAL RULES:
+1. 🤝 Be respectful to all users
+2. 🚫 No harassment, bullying, or abusive behavior
+3. 💬 Keep conversations friendly and appropriate
+4. 🔒 Respect others' privacy and anonymity
+5. 🌍 Welcome users from all backgrounds and cultures
+
+🚫 PROHIBITED CONTENT:
+1. 🔞 No adult, sexual, or inappropriate content
+2. 📷 No sharing of personal information (real names, addresses, phone numbers)
+3. 💰 No advertising, spam, or commercial content
+4. 🎭 No impersonation or fake identities
+5. 🗣️ No hate speech, racism, or discrimination
+6. 🔗 No sharing of external links or contact information
+7. 🚨 No illegal activities or content
+
+💎 VIP FEATURES:
+1. 🌟 VIP status is earned through diamonds or purchases
+2. 🚹🚺 Gender and age matching available for VIP users
+3. 🌐 Translation features for premium members
+4. ⚡ Priority matching and exclusive features
+
+🚨 REPORTING & MODERATION:
+1. 📝 Use /report to report violations
+2. 👮‍♂️ Moderators will review all reports
+3. ⚖️ Violations may result in warnings or permanent bans
+4. 🔒 False reports will also be penalized
+
+🎁 REWARDS & BONUSES:
+1. 🎯 Daily bonuses available through /bonus
+2. 🔗 Referral system rewards active users
+3. 💎 Earn diamonds through various activities
+4. 🏆 Top users featured in leaderboards
+
+⚠️ CONSEQUENCES:
+1. 🟨 First violation: Warning
+2. 🟧 Second violation: Temporary ban (24 hours)
+3. 🟥 Third violation: Permanent ban
+4. 🚫 Severe violations result in immediate permanent ban
+
+📱 TECHNICAL RULES:
+1. 🤖 No bot usage or automated messages
+2. 🔧 No attempts to exploit or hack the system
+3. 📊 No data mining or scraping user information
+4. 🚀 Report bugs and issues to administrators
+
+🌟 SPECIAL NOTES:
+- 👑 Administrators have final say in all decisions
+- 🔄 Rules may be updated periodically
+- 📢 Important announcements will be broadcast to all users
+- 💬 Feedback and suggestions are welcome through proper channels
+
+🎯 MISSION:
+Our goal is to create a safe, fun, and inclusive anonymous chat environment where people can connect, share experiences, and make new friends while maintaining their privacy.
+
+🤝 COMMUNITY GUIDELINES:
+- Be kind and considerate
+- Help create a positive atmosphere
+- Respect different opinions and viewpoints
+- Contribute to meaningful conversations
+- Support fellow community members
+
+🔐 PRIVACY & SECURITY:
+- Your anonymity is protected
+- No personal data is shared without consent
+- Conversations are not monitored unless reported
+- Your safety is our priority
+
+Thank you for being part of our community! 
+Together, we can make this the best anonymous chat platform! 🌟
+
+For questions or appeals, contact the administration.
+Last updated: June 2025
