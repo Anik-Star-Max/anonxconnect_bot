@@ -1,9 +1,14 @@
 import os
 
-# Simple configuration - will work 100%
+# Get environment variables with safety checks
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = os.getenv("ADMIN_ID")  # Not used in this minimal version
 
-# Just for demonstration
+if not BOT_TOKEN:
+    raise ValueError("❌ BOT_TOKEN environment variable is required!")
+
+# Optional ADMIN_ID
+ADMIN_ID = os.getenv("ADMIN_ID", "")
+
+# Other configuration
 VIP_PRICES = {1: 500, 2: 1000, 3: 1500, 5: 2000}
 INACTIVITY_TIMEOUT = 300
