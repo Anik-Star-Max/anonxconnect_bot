@@ -1,42 +1,28 @@
-import json
-import os
-from datetime import datetime
-import config
+from database import *
+from config import ADMIN_ID
 
 def initialize_admin():
-    # Load or create users.json
-    users = {}
-    if os.path.exists('users.json'):
-        try:
-            with open('users.json', 'r') as f:
-                users = json.load(f)
-        except:
-            users = {}
-    
-    # Create admin profile
-    admin_id = str(config.ADMIN_ID)
-    users[admin_id] = {
-        'name': 'Admin User',
-        'is_admin': True,
-        'vip_expiry': config.ADMIN_VIP_EXPIRY,
-        'diamonds': config.ADMIN_DIAMONDS,
-        'referrals': 0,
-        'chats': 0,
-        'rating': 5,
-        'language': 'en',
-        'partner': None,
-        'waiting': False,
-        'public_profile': False,
-        'translate_enabled': True,
-        'photos': [],
-        'last_active': datetime.now().isoformat()
-    }
-    
-    # Save to file
-    with open('users.json', 'w') as f:
-        json.dump(users, f, indent=2)
-    
-    print(f"✅ Admin {config.ADMIN_ID} initialized with lifetime VIP access")
+    """Initialize admin with lifetime VIP and unlimited diamonds"""
+    try:
+        # Add admin as user if not exists
+        add_user(ADMIN_ID, "mysteryman02")
+        
+        # Give admin unlimited diamonds (999999)
+        user_data = get_user_data(ADMIN_ID)
+        user_data['diamonds'] = 999999
+        user_data['vip'] = True
+        user_data['vip_expires'] = None  # Lifetime VIP
+        user_data['is_admin'] = True
+        
+        # Save admin data
+        users = load_users()
+        users[str(ADMIN_ID)] = user_data
+        save_users(users)
+        
+        print(f"✅ Admin {ADMIN_ID} initialized with lifetime VIP and unlimited diamonds!")
+        
+    except Exception as e:
+        print(f"❌ Error initializing admin: {e}")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     initialize_admin()
