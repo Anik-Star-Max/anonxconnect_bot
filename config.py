@@ -2,78 +2,48 @@ import os
 
 # Bot Configuration
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-BOT_USERNAME = os.getenv('BOT_USERNAME', 'YourBotUsername')
-ADMIN_ID = int(os.getenv('ADMIN_ID', '0'))
+ADMIN_ID = int(os.getenv('ADMIN_ID'))
+BOT_USERNAME = os.getenv('BOT_USERNAME')
 
-# VIP Packages (days: diamonds)
+# VIP Packages (in diamonds)
 VIP_PACKAGES = {
-    1: 500,
-    2: 1000,
-    3: 1500,
-    5: 2000
+    '1_day': {'price': 500, 'days': 1},
+    '2_days': {'price': 1000, 'days': 2},
+    '3_days': {'price': 1500, 'days': 3},
+    '5_days': {'price': 2000, 'days': 5}
 }
 
 # Daily bonus diamonds
 DAILY_BONUS = 50
 
 # Photo roulette settings
-MAX_PHOTOS_PER_USER = 5
+PHOTO_VOTES_REQUIRED = 5
+PHOTO_LIKE_REWARD = 10
 
-# Translation languages
-SUPPORTED_LANGUAGES = {
-    'en': 'English',
-    'es': 'Spanish',
-    'fr': 'French',
-    'de': 'German',
-    'it': 'Italian',
-    'pt': 'Portuguese',
-    'ru': 'Russian',
-    'hi': 'Hindi',
-    'ar': 'Arabic',
-    'ja': 'Japanese',
-    'ko': 'Korean',
-    'zh': 'Chinese',
-    'tr': 'Turkish',
-    'pl': 'Polish',
-    'nl': 'Dutch'
-}
-
-# File paths
+# Database file paths
 USERS_DB = 'users.json'
 COMPLAINTS_DB = 'complaints.json'
-RAILWAY_CONFIG = 'railway.json'
-RULES_FILE = 'rules.txt'
-CHAT_LOGS = 'chat_logs.json'
+RAILWAY_DB = 'railway.json'
+PHOTO_ROULETTE_DB = 'photo_roulette.json'
+CHAT_LOGS_DB = 'chat_logs.json'
 
-# Messages
-WELCOME_MESSAGE = """
-🌟 Welcome to Anonymous Chat Bot! 🌟
+# Supported languages for translation
+SUPPORTED_LANGUAGES = {
+    '🇺🇸 English': 'en',
+    '🇪🇸 Spanish': 'es',
+    '🇫🇷 French': 'fr',
+    '🇩🇪 German': 'de',
+    '🇮🇹 Italian': 'it',
+    '🇷🇺 Russian': 'ru',
+    '🇨🇳 Chinese': 'zh',
+    '🇯🇵 Japanese': 'ja',
+    '🇰🇷 Korean': 'ko',
+    '🇵🇹 Portuguese': 'pt',
+    '🇮🇳 Hindi': 'hi',
+    '🇸🇦 Arabic': 'ar'
+}
 
-🔒 Chat anonymously with strangers worldwide
-🌍 Meet new people without revealing your identity
-💎 Earn diamonds and get VIP features
-🎁 Daily bonuses and referral rewards
-
-Choose your gender and age to get started!
-
-/menu - Access all features
-/rules - Read our community guidelines
-"""
-
-VIP_FEATURES = """
-💎 VIP Features:
-
-✅ Gender Selection - Choose who to chat with
-✅ Age Range Filter - Set preferred age range
-✅ Profile Preview - See basic info before chat
-✅ Priority Matching - Get matched faster
-✅ Translation Service - Auto-translate messages
-✅ Photo Roulette - Upload and rate photos
-✅ Extended Settings - More customization options
-
-💰 VIP Packages:
-1 Day - 500 💎
-2 Days - 1000 💎
-3 Days - 1500 💎
-5 Days - 2000 💎
-"""
+# Default settings
+DEFAULT_LANGUAGE = 'en'
+DEFAULT_GENDER = 'any'
+DEFAULT_AGE_RANGE = [18, 99]
