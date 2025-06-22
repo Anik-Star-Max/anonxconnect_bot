@@ -15,7 +15,7 @@ def init_database():
         PHOTO_ROULETTE_DB,
         CHAT_LOGS_DB
     ]
-    
+                
     for db in databases:
         if not os.path.exists(db):
             with open(db, 'w') as f:
