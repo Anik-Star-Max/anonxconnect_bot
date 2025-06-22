@@ -21,7 +21,7 @@ def init_database():
             with open(db, 'w', encoding='utf-8') as f:
                 json.dump({}, f)
 
-def load_json(filename):
+def load_json(filename: str) -> dict:
     """Load data from a JSON file."""
     try:
         with open(filename, 'r', encoding='utf-8') as f:
@@ -29,7 +29,7 @@ def load_json(filename):
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
-def save_json(filename, data):
+def save_json(filename: str, data: dict) -> None:
     """Save data to a JSON file."""
     try:
         with open(filename, 'w', encoding='utf-8') as f:
@@ -37,26 +37,26 @@ def save_json(filename, data):
     except IOError as e:
         print(f"Error saving to {filename}: {e}")
 
-def load_users():
+def load_users() -> dict:
     """Load user data from the database."""
     return load_json(USERS_DB)
 
-def save_users(users_data):
+def save_users(users_data: dict) -> None:
     """Save user data to the database."""
     save_json(USERS_DB, users_data)
 
-def get_user(user_id):
+def get_user(user_id: int) -> dict:
     """Get user data from the database."""
     users = load_users()
     return users.get(str(user_id))
 
-def save_user(user_id, user_data):
+def save_user(user_id: int, user_data: dict) -> None:
     """Save user data to the database."""
     users = load_users()
     users[str(user_id)] = user_data
     save_users(users)
 
-def create_user(user_id, username, first_name):
+def create_user(user_id: int, username: str, first_name: str) -> dict:
     """Create a new user in the database."""
     user_data = {
         'user_id': user_id,
@@ -87,7 +87,7 @@ def create_user(user_id, username, first_name):
     save_user(user_id, user_data)
     return user_data
 
-def update_user(user_id, **kwargs):
+def update_user(user_id: int, **kwargs) -> dict:
     """Update user data."""
     user = get_user(user_id)
     if user:
@@ -97,7 +97,7 @@ def update_user(user_id, **kwargs):
         return user
     return None
 
-def is_user_vip(user_id):
+def is_user_vip(user_id: int) -> bool:
     """Check if user has VIP status."""
     if user_id == ADMIN_ID:
         return True
@@ -109,7 +109,7 @@ def is_user_vip(user_id):
     vip_until = datetime.fromisoformat(user['vip_until'])
     return datetime.now() < vip_until
 
-def add_diamonds(user_id, amount):
+def add_diamonds(user_id: int, amount: int) -> int:
     """Add diamonds to user."""
     user = get_user(user_id)
     if user:
@@ -118,7 +118,7 @@ def add_diamonds(user_id, amount):
         return user['diamonds']
     return 0
 
-def spend_diamonds(user_id, amount):
+def spend_diamonds(user_id: int, amount: int) -> bool:
     """Spend diamonds from user."""
     user = get_user(user_id)
     if user and user.get('diamonds', 0) >= amount:
@@ -127,7 +127,7 @@ def spend_diamonds(user_id, amount):
         return True
     return False
 
-def give_vip(user_id, days):
+def give_vip(user_id: int, days: int) -> bool:
     """Give VIP status to user."""
     user = get_user(user_id)
     if user:
@@ -143,7 +143,7 @@ def give_vip(user_id, days):
         return True
     return False
 
-def find_available_partner(user_id):
+def find_available_partner(user_id: int) -> str:
     """Find an available partner for the user."""
     users = load_users()
     user = users.get(str(user_id))
@@ -175,12 +175,12 @@ def find_available_partner(user_id):
     
     return available_users[0] if available_users else None
 
-def connect_users(user1_id, user2_id):
+def connect_users(user1_id: int, user2_id: int) -> None:
     """Connect two users for chat."""
     update_user(user1_id, current_partner=user2_id, waiting_for_partner=False)
     update_user(user2_id, current_partner=user1_id, waiting_for_partner=False)
 
-def disconnect_users(user1_id, user2_id=None):
+def disconnect_users(user1_id: int, user2_id: int = None) -> str:
     """Disconnect users from chat."""
     user1 = get_user(user1_id)
     if user1 and user1.get('current_partner'):
@@ -190,7 +190,7 @@ def disconnect_users(user1_id, user2_id=None):
         return partner_id
     return None
 
-def add_complaint(user_id, partner_id, reason):
+def add_complaint(user_id: int, partner_id: int, reason: str) -> str:
     """Add a complaint to the database."""
     complaints = load_json(COMPLAINTS_DB)
     complaint_id = str(len(complaints) + 1)
@@ -208,7 +208,7 @@ def add_complaint(user_id, partner_id, reason):
     save_json(COMPLAINTS_DB, complaints)
     return complaint_id
 
-def log_chat_message(sender_id, receiver_id, message_type, content):
+def log_chat_message(sender_id: int, receiver_id: int, message_type: str, content: str) -> None:
     """Log chat messages for admin monitoring."""
     logs = load_json(CHAT_LOGS_DB)
     log_id = str(len(logs) + 1)
@@ -225,7 +225,7 @@ def log_chat_message(sender_id, receiver_id, message_type, content):
     logs[log_id] = log_data
     save_json(CHAT_LOGS_DB, logs)
 
-def get_user_stats():
+def get_user_stats() -> dict:
     """Get bot statistics."""
     users = load_users()
     complaints = load_json(COMPLAINTS_DB)
@@ -244,7 +244,7 @@ def get_user_stats():
         'total_complaints': total_complaints
     }
 
-def get_top_referrals(limit=10):
+def get_top_referrals(limit: int = 10) -> list:
     """Get top users by referral count."""
     users = load_users()
     referral_counts = []
@@ -262,10 +262,10 @@ def get_top_referrals(limit=10):
     referral_counts.sort(key=lambda x: x['referral_count'], reverse=True)
     return referral_counts[:limit]
 
-def ban_user(user_id):
+def ban_user(user_id: int) -> bool:
     """Ban a user."""
     return update_user(user_id, banned=True, current_partner=None, waiting_for_partner=False)
 
-def unban_user(user_id):
+def unban_user(user_id: int) -> bool:
     """Unban a user."""
     return update_user(user_id, banned=False)
