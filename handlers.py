@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.constants import ParseMode  # ✅ Fixed
 from telegram.ext import ContextTypes
 from database import (
     get_user, create_user, update_user, is_user_vip, add_diamonds, spend_diamonds,
