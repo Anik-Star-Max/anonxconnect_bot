@@ -1,15 +1,33 @@
+import os
 import database
-from config import ADMIN_ID
 
-# Ensure admin always has VIP and is unbanned
-admin = database.get_user(ADMIN_ID)
+def create_admin():
+    admin_id = os.getenv("ADMIN_ID")
+    admin_username = os.getenv("BOT_USERNAME", "admin")
 
-if not admin:
-    # Create the admin user without username and first name
-    database.create_user(ADMIN_ID, None, None)  # No username or first name
+    admin_data = {
+        "user_id": admin_id,
+        "username": admin_username,
+        "gender": "admin",
+        "age": None,
+        "vip": "lifetime",
+        "vip_expiry": None,
+        "diamonds": 9999999,
+        "language": "en",
+        "current_partner": None,
+        "ban": False,
+        "is_admin": True,
+        "allow_referral_top": True,
+        "photo_url": None,
+        "profile": {},
+        "settings": {}
+    }
 
-# Give VIP status to the admin for 10 years (3650 days)
-database.give_vip(ADMIN_ID, 3650)
+    if database.user_exists(admin_id):
+        print(f"Admin user with ID {admin_id} already exists.")
+    else:
+        database.create_user(admin_data)
+        print(f"Admin user '{admin_username}' with ID {admin_id} created successfully and granted lifetime VIP.")
 
-# Unban the admin user
-database.unban_user(ADMIN_ID)
+if __name__ == "__main__":
+    create_admin()
