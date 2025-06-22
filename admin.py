@@ -12,7 +12,7 @@ class AdminPanel:
         self.load_admin_logs()
     
     def load_chat_logs(self):
-        """Load chat logs for admin monitoring"""
+        """Load chat logs for admin monitoring."""
         try:
             with open(self.chat_logs_file, 'r', encoding='utf-8') as f:
                 self.chat_logs = json.load(f)
@@ -21,12 +21,12 @@ class AdminPanel:
             self.save_chat_logs()
     
     def save_chat_logs(self):
-        """Save chat logs"""
+        """Save chat logs."""
         with open(self.chat_logs_file, 'w', encoding='utf-8') as f:
             json.dump(self.chat_logs, f, indent=2, ensure_ascii=False)
     
     def load_admin_logs(self):
-        """Load admin action logs"""
+        """Load admin action logs."""
         try:
             with open(self.admin_logs_file, 'r', encoding='utf-8') as f:
                 self.admin_logs = json.load(f)
@@ -35,16 +35,16 @@ class AdminPanel:
             self.save_admin_logs()
     
     def save_admin_logs(self):
-        """Save admin action logs"""
+        """Save admin action logs."""
         with open(self.admin_logs_file, 'w', encoding='utf-8') as f:
             json.dump(self.admin_logs, f, indent=2, ensure_ascii=False)
     
-    def is_admin(self, user_id):
-        """Check if user is admin"""
+    def is_admin(self, user_id: int) -> bool:
+        """Check if user is admin."""
         return user_id == self.admin_id
     
-    def log_chat_message(self, user_id, partner_id, message_text, message_type="text"):
-        """Log chat message for admin monitoring"""
+    def log_chat_message(self, user_id: int, partner_id: int, message_text: str, message_type: str = "text") -> None:
+        """Log chat message for admin monitoring."""
         log_entry = {
             "timestamp": datetime.now().isoformat(),
             "user_id": user_id,
@@ -67,8 +67,8 @@ class AdminPanel:
         
         self.save_chat_logs()
     
-    def log_admin_action(self, action, target_user_id=None, details=""):
-        """Log admin actions"""
+    def log_admin_action(self, action: str, target_user_id: int = None, details: str = "") -> None:
+        """Log admin actions."""
         log_entry = {
             "timestamp": datetime.now().isoformat(),
             "admin_id": self.admin_id,
@@ -85,8 +85,8 @@ class AdminPanel:
         
         self.save_admin_logs()
     
-    def ban_user(self, user_id, reason="No reason provided"):
-        """Ban a user"""
+    def ban_user(self, user_id: int, reason: str = "No reason provided") -> tuple:
+        """Ban a user."""
         users = load_users()
         user_str = str(user_id)
         
@@ -97,12 +97,12 @@ class AdminPanel:
             save_users(users)
             
             self.log_admin_action("BAN_USER", user_id, f"Reason: {reason}")
-            return True, f"User {user_id} has been banned. Reason: {reason}"
+            return True, f"User  {user_id} has been banned. Reason: {reason}"
         
-        return False, "User not found"
+        return False, "User  not found"
     
-    def unban_user(self, user_id):
-        """Unban a user"""
+    def unban_user(self, user_id: int) -> tuple:
+        """Unban a user."""
         users = load_users()
         user_str = str(user_id)
         
@@ -113,12 +113,12 @@ class AdminPanel:
             save_users(users)
             
             self.log_admin_action("UNBAN_USER", user_id)
-            return True, f"User {user_id} has been unbanned"
+            return True, f"User  {user_id} has been unbanned"
         
-        return False, "User not found"
+        return False, "User  not found"
     
-    def give_diamonds(self, user_id, amount):
-        """Give diamonds to a user"""
+    def give_diamonds(self, user_id: int, amount: int) -> tuple:
+        """Give diamonds to a user."""
         users = load_users()
         user_str = str(user_id)
         
@@ -130,10 +130,10 @@ class AdminPanel:
             self.log_admin_action("GIVE_DIAMONDS", user_id, f"Amount: {amount}")
             return True, f"Gave {amount} diamonds to user {user_id}. New balance: {current_diamonds + amount}"
         
-        return False, "User not found"
+        return False, "User  not found"
     
-    def give_vip(self, user_id, days):
-        """Give VIP status to a user"""
+    def give_vip(self, user_id: int, days: int) -> tuple:
+        """Give VIP status to a user."""
         users = load_users()
         user_str = str(user_id)
         
@@ -141,7 +141,7 @@ class AdminPanel:
             current_vip = users[user_str].get("vip_expires", datetime.now().isoformat())
             try:
                 current_vip_date = datetime.fromisoformat(current_vip)
-            except:
+            except ValueError:
                 current_vip_date = datetime.now()
             
             # If current VIP is expired, start from now
@@ -156,10 +156,10 @@ class AdminPanel:
             self.log_admin_action("GIVE_VIP", user_id, f"Days: {days}")
             return True, f"Gave {days} days VIP to user {user_id}. Expires: {new_vip_date.strftime('%Y-%m-%d %H:%M')}"
         
-        return False, "User not found"
+        return False, "User  not found"
     
-    def get_user_info(self, user_id):
-        """Get detailed user information"""
+    def get_user_info(self, user_id: int) -> dict:
+        """Get detailed user information."""
         users = load_users()
         user_str = str(user_id)
         
@@ -176,8 +176,8 @@ class AdminPanel:
         
         return None
     
-    def get_chat_logs(self, user_id=None, limit=50):
-        """Get chat logs for monitoring"""
+    def get_chat_logs(self, user_id: int = None, limit: int = 50) -> list:
+        """Get chat logs for monitoring."""
         if user_id:
             # Get logs for specific user
             user_logs = []
@@ -197,8 +197,8 @@ class AdminPanel:
             all_logs.sort(key=lambda x: x["timestamp"], reverse=True)
             return all_logs[:limit]
     
-    def get_stats(self):
-        """Get bot statistics"""
+    def get_stats(self) -> dict:
+        """Get bot statistics."""
         users = load_users()
         complaints = load_complaints()
         
@@ -215,7 +215,7 @@ class AdminPanel:
             try:
                 if datetime.fromisoformat(reg_date).date() == today:
                     today_registrations += 1
-            except:
+            except ValueError:
                 pass
         
         return {
@@ -228,8 +228,8 @@ class AdminPanel:
             "total_chat_sessions": len(self.chat_logs)
         }
     
-    def broadcast_message(self, message_text, target_group="all"):
-        """Prepare broadcast message data"""
+    def broadcast_message(self, message_text: str, target_group: str = "all") -> tuple:
+        """Prepare broadcast message data."""
         users = load_users()
         target_users = []
         
