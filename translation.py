@@ -1,76 +1,73 @@
 from deep_translator import GoogleTranslator
-from database import get_user, is_vip
 import logging
+from database import get_user, is_vip
 
 logger = logging.getLogger(__name__)
 
-def detect_language(text: str) -> str:
+def detect_language(text):
     """Detect the language of the text."""
     try:
-        # Use Google Translator to detect language
-        detected = GoogleTranslator(source='auto', target='en').translate(text)
-        # This is a simplified detection, in real implementation you'd use language detection
-        return 'auto'
-    except Exception as e:
-        logger.error(f"Language detection error: {e}")
-        return 'en'
+        from langdetect import detect
+        return detect(text)
+    except:
+        return 'en'  # Default to English
 
-def translate_message(text: str, target_language: str, source_language: str = 'auto') -> str:
-    """Translate message to target language."""
+def translate_message(text, from_lang, to_lang):
+    """Translate message from one language to another."""
+    if from_lang == to_lang:
+        return text
+    
     try:
-        if source_language == target_language:
-            return text
-        
-        translator = GoogleTranslator(source=source_language, target=target_language)
+        translator = GoogleTranslator(source=from_lang, target=to_lang)
         translated = translator.translate(text)
         return translated
     except Exception as e:
         logger.error(f"Translation error: {e}")
         return text  # Return original text if translation fails
 
-def should_translate(sender_id: int, receiver_id: int) -> tuple:
-    """Check if message should be translated and return languages."""
-    sender = get_user(sender_id)
-    receiver = get_user(receiver_id)
-    
-    # Only VIP users can use translation
-    if not is_vip(receiver_id):
+def should_translate(user_id, partner_id, message_text):
+    """Check if message should be translated."""
+    # Check if user has VIP and translation enabled
+    if not is_vip(user_id):
         return False, None, None
     
-    # Check if receiver has translation enabled
-    if not receiver.get('translation_enabled', False):
+    user = get_user(user_id)
+    partner = get_user(partner_id)
+    
+    if not user or not partner:
         return False, None, None
     
-    sender_lang = sender.get('language', 'en')
-    receiver_lang = receiver.get('language', 'en')
-    
-    # No need to translate if same language
-    if sender_lang == receiver_lang:
+    # Check if translation is enabled for user
+    if not user.get('settings', {}).get('translation', False):
         return False, None, None
     
-    return True, sender_lang, receiver_lang
+    user_lang = user.get('language', 'en')
+    partner_lang = partner.get('language', 'en')
+    
+    # If same language, no translation needed
+    if user_lang == partner_lang:
+        return False, None, None
+    
+    # Detect message language
+    detected_lang = detect_language(message_text)
+    
+    # If message is already in partner's language, no translation needed
+    if detected_lang == partner_lang:
+        return False, None, None
+    
+    return True, detected_lang, partner_lang
 
-def format_translated_message(original: str, translated: str, source_lang: str) -> str:
-    """Format message with translation indicator."""
-    return f"🌐 **Translated from {source_lang.upper()}:**\n{translated}\n\n💬 **Original:**\n{original}"
-
-def get_language_name(code: str) -> str:
-    """Get language name from code."""
-    languages = {
-        'en': 'English',
-        'es': 'Spanish', 
-        'fr': 'French',
-        'de': 'German',
-        'it': 'Italian',
-        'ru': 'Russian',
-        'ar': 'Arabic',
-        'hi': 'Hindi',
-        'zh': 'Chinese',
-        'ja': 'Japanese',
-        'ko': 'Korean',
-        'pt': 'Portuguese',
-        'tr': 'Turkish',
-        'nl': 'Dutch',
-        'sv': 'Swedish'
-    }
-    return languages.get(code, code.upper())
+def get_translated_message(user_id, partner_id, message_text):
+    """Get translated version of message if needed."""
+    should_trans, from_lang, to_lang = should_translate(user_id, partner_id, message_text)
+    
+    if not should_trans:
+        return message_text, False
+    
+    translated = translate_message(message_text, from_lang, to_lang)
+    
+    # Add translation indicator
+    if translated != message_text:
+        return f"{translated}\n\n🌐 _Translated from {from_lang.upper()}_", True
+    
+    return message_text, False
