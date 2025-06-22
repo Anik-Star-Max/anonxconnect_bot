@@ -866,7 +866,7 @@ async def show_referral_top(query, context):
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode=ParseMode.HTML
     )
-    
+
 async def show_photo_roulette(query, context):
     """Show photo roulette options."""
     text = "📸 <b>Photo Roulette</b>\n\n" \
@@ -882,7 +882,7 @@ async def show_photo_roulette(query, context):
     await query.edit_message_text(
         text,
         reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode=ParseMode.HTML
+        parse_mode='HTML'
     )
 
 async def upload_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -908,6 +908,7 @@ async def handle_uploaded_photo(update: Update, context: ContextTypes.DEFAULT_TY
         # Save the photo to the database or process it as needed
         await update.message.reply_text("✅ Your photo has been uploaded successfully!")
         # Optionally, you can add logic to store the photo ID in the database
+        # Example: add_photo(user_id, photo_id)
     else:
         await update.message.reply_text("❌ Please send a valid photo.")
 
@@ -962,7 +963,7 @@ async def show_vip_packages(query, context):
     await query.edit_message_text(
         text,
         reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode=ParseMode.HTML
+        parse_mode='HTML'
     )
 
 async def handle_vip_purchase(query, context, data):
@@ -1062,7 +1063,7 @@ async def show_settings(query, context):
     await query.edit_message_text(
         text,
         reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode=ParseMode.HTML
+        parse_mode='HTML'
     )
 
 async def show_main_menu(query, context):
@@ -1070,7 +1071,7 @@ async def show_main_menu(query, context):
     await query.edit_message_text(
         "🔑 <b>Main Menu</b>\n\nChoose an option below:",
         reply_markup=get_main_menu_keyboard(),
-        parse_mode=ParseMode.HTML
+        parse_mode='HTML'
     )
 
 async def report_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
