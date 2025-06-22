@@ -2,7 +2,7 @@ import os
 
 # Bot Configuration
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-ADMIN_ID = int(os.getenv('ADMIN_ID'))
+ADMIN_ID = int(os.getenv('ADMIN_ID'))  # Assuming this variable is always set
 BOT_USERNAME = os.getenv('BOT_USERNAME')
 
 # VIP Packages (in diamonds)
