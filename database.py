@@ -18,38 +18,43 @@ def init_database():
                 
     for db in databases:
         if not os.path.exists(db):
-            with open(db, 'w') as f:
+            with open(db, 'w', encoding='utf-8') as f:
                 json.dump({}, f)
 
 def load_json(filename):
-    """Load data from JSON file."""
+    """Load data from a JSON file."""
     try:
         with open(filename, 'r', encoding='utf-8') as f:
             return json.load(f)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
+def save_json(filename, data):
+    """Save data to a JSON file."""
+    try:
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    except IOError as e:
+        print(f"Error saving to {filename}: {e}")
+
 def load_users():
+    """Load user data from the database."""
     return load_json(USERS_DB)
 
-def save_json(filename, data):
-    """Save data to JSON file."""
-    with open(filename, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-
 def save_users(users_data):
+    """Save user data to the database."""
     save_json(USERS_DB, users_data)
 
 def get_user(user_id):
-    """Get user data from database."""
-    users = load_json(USERS_DB)
+    """Get user data from the database."""
+    users = load_users()
     return users.get(str(user_id))
 
 def save_user(user_id, user_data):
-    """Save user data to database."""
-    users = load_json(USERS_DB)
+    """Save user data to the database."""
+    users = load_users()
     users[str(user_id)] = user_data
-    save_json(USERS_DB, users)
+    save_users(users)
 
 def create_user(user_id, username, first_name):
     """Create a new user in the database."""
@@ -128,10 +133,7 @@ def give_vip(user_id, days):
     if user:
         if user.get('vip_until'):
             vip_until = datetime.fromisoformat(user['vip_until'])
-            if vip_until > datetime.now():
-                new_vip_until = vip_until + timedelta(days=days)
-            else:
-                new_vip_until = datetime.now() + timedelta(days=days)
+            new_vip_until = vip_until + timedelta(days=days) if vip_until > datetime.now() else datetime.now() + timedelta(days=days)
         else:
             new_vip_until = datetime.now() + timedelta(days=days)
         
@@ -143,7 +145,7 @@ def give_vip(user_id, days):
 
 def find_available_partner(user_id):
     """Find an available partner for the user."""
-    users = load_json(USERS_DB)
+    users = load_users()
     user = users.get(str(user_id))
     
     if not user:
@@ -159,9 +161,8 @@ def find_available_partner(user_id):
             # Check if user is VIP and has preferences
             if is_user_vip(user_id):
                 # Check gender preference
-                if user.get('preferred_gender', 'any') != 'any':
-                    if u.get('gender') != user['preferred_gender']:
-                        continue
+                if user.get('preferred_gender', 'any') != 'any' and u.get('gender') != user['preferred_gender']:
+                    continue
                 
                 # Check age preference
                 if u.get('age'):
@@ -226,7 +227,7 @@ def log_chat_message(sender_id, receiver_id, message_type, content):
 
 def get_user_stats():
     """Get bot statistics."""
-    users = load_json(USERS_DB)
+    users = load_users()
     complaints = load_json(COMPLAINTS_DB)
     
     total_users = len(users)
@@ -245,7 +246,7 @@ def get_user_stats():
 
 def get_top_referrals(limit=10):
     """Get top users by referral count."""
-    users = load_json(USERS_DB)
+    users = load_users()
     referral_counts = []
     
     for user_id, user_data in users.items():
