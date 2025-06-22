@@ -1,45 +1,58 @@
 import logging
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
-import handlers
-from config import BOT_TOKEN
+import os
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler
+from handlers import *
+from database import init_database
 
+# Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+logger = logging.getLogger(__name__)
 
-application = ApplicationBuilder().token(BOT_TOKEN).build()
-
-# Commands
-application.add_handler(CommandHandler("start", handlers.start))
-application.add_handler(CommandHandler("next", handlers.next_chat))
-application.add_handler(CommandHandler("stop", handlers.stop_chat))
-application.add_handler(CommandHandler("menu", handlers.menu))
-application.add_handler(CommandHandler("bonus", handlers.daily_bonus))
-application.add_handler(CommandHandler("profile", handlers.profile))
-application.add_handler(CommandHandler("rules", handlers.rules_command))
-application.add_handler(CommandHandler("report", handlers.report_command))
-
-# Admin
-application.add_handler(CommandHandler("ban", handlers.ban))
-application.add_handler(CommandHandler("unban", handlers.unban))
-application.add_handler(CommandHandler("broadcast", handlers.broadcast))
-application.add_handler(CommandHandler("vip", handlers.vip_admin))
-application.add_handler(CommandHandler("stats", handlers.stats))
-
-# Special modules
-application.add_handler(CommandHandler("premium", handlers.premium))
-application.add_handler(CommandHandler("getvip", handlers.get_vip))
-application.add_handler(CommandHandler("translatestatus", handlers.translate_status))
-application.add_handler(CommandHandler("settings", handlers.settings))
-application.add_handler(CommandHandler("referral", handlers.referral))
-application.add_handler(CommandHandler("referraltop", handlers.referral_top))
-application.add_handler(CommandHandler("photo_roulette", handlers.photo_roulette))
-
-# Message forwarding for anonymous chat (text, stickers, images)
-application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handlers.forward_message))
-application.add_handler(MessageHandler(filters.PHOTO, handlers.forward_media))
-application.add_handler(MessageHandler(filters.STICKER, handlers.forward_media))
+def main():
+    """Start the bot."""
+    # Get bot token from environment variables
+    BOT_TOKEN = os.getenv('BOT_TOKEN')
+    
+    if not BOT_TOKEN:
+        logger.error("BOT_TOKEN not found in environment variables!")
+        return
+    
+    # Initialize database
+    init_database()
+    
+    # Create the Application
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # Register command handlers
+    application.add_handler(CommandHandler("start", start_command))
+    application.add_handler(CommandHandler("stop", stop_command))
+    application.add_handler(CommandHandler("next", next_command))
+    application.add_handler(CommandHandler("menu", menu_command))
+    application.add_handler(CommandHandler("bonus", bonus_command))
+    application.add_handler(CommandHandler("profile", profile_command))
+    application.add_handler(CommandHandler("rules", rules_command))
+    application.add_handler(CommandHandler("report", report_command))
+    
+    # Admin commands
+    application.add_handler(CommandHandler("ban", ban_command))
+    application.add_handler(CommandHandler("unban", unban_command))
+    application.add_handler(CommandHandler("stats", stats_command))
+    application.add_handler(CommandHandler("broadcast", broadcast_command))
+    application.add_handler(CommandHandler("give_diamonds", give_diamonds_command))
+    application.add_handler(CommandHandler("view_chats", view_chats_command))
+    
+    # Callback query handler for inline keyboards
+    application.add_handler(CallbackQueryHandler(button_callback))
+    
+    # Message handler for forwarding messages
+    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
+    
+    # Run the bot
+    logger.info("Bot started successfully!")
+    application.run_polling(allowed_updates=["message", "callback_query"])
 
 if __name__ == '__main__':
-    application.run_polling()
+    main()
