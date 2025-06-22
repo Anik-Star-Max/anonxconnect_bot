@@ -874,7 +874,7 @@ async def show_photo_roulette(query, context):
            "Choose an option below:"
     
     keyboard = [
-        [InlineKeyboardButton("🎲 Upload Photo", callback_data="upload_photo")],
+        [InlineKeyboardButton("🎲 Add Photo", callback_data="add_photo")],
         [InlineKeyboardButton("🖼️ View Random Photo", callback_data="view_random_photo")],
         [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]
     ]
