@@ -18,7 +18,7 @@ from database import (
 from translation import get_translation_info, get_available_languages
 
 from photo_roulette import (
-    upload_photo, get_random_photo, vote_photo, get_photo_stats, get_user_photos
+    add_photo, get_random_photo, vote_photo, get_photo_stats, get_user_photos
 )
 
 from config import ADMIN_ID, VIP_PACKAGES, DAILY_BONUS, COMPLAINTS_DB, CHAT_LOGS_DB
