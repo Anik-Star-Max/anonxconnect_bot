@@ -1,175 +1,198 @@
 import logging
 from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode
 from telegram.ext import ContextTypes
-from telegram.constants import ParseMode
-from database import *
-from translation import get_translated_message
-from config import *
+from database import (
+    get_user, create_user, update_user, is_user_vip, add_diamonds, spend_diamonds,
+    give_vip, find_available_partner, connect_users, disconnect_users,
+    add_complaint, log_chat_message, get_user_stats, get_top_referrals,
+    ban_user as db_ban_user, unban_user as db_unban_user, load_json
+)
+from translation import get_translation_info, get_available_languages
+from photo_roulette import (
+    upload_photo, get_random_photo, vote_photo, get_photo_stats,
+    get_user_photos
+)
+from config import ADMIN_ID, VIP_PACKAGES, DAILY_BONUS, COMPLAINTS_DB, CHAT_LOGS_DB
 
 logger = logging.getLogger(__name__)
 
-# Start command
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Helper function to check if user is admin
+def is_admin(user_id):
+    return user_id == ADMIN_ID
+
+# Helper function to get main menu keyboard
+def get_main_menu_keyboard():
+    keyboard = [
+        [
+            InlineKeyboardButton("🔝 Referral TOP", callback_data="referral_top"),
+            InlineKeyboardButton("👤 Profile", callback_data="profile")
+        ],
+        [
+            InlineKeyboardButton("📋 Rules", callback_data="rules"),
+            InlineKeyboardButton("📸 Photo Roulette", callback_data="photo_roulette")
+        ],
+        [
+            InlineKeyboardButton("💎 Premium", callback_data="premium"),
+            InlineKeyboardButton("⭐ Get VIP Status", callback_data="get_vip")
+        ],
+        [
+            InlineKeyboardButton("🌐 Translate Status", callback_data="translate_status"),
+            InlineKeyboardButton("⚙️ Settings", callback_data="settings")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /start command."""
     user_id = update.effective_user.id
     username = update.effective_user.username
     first_name = update.effective_user.first_name
     
     user = get_user(user_id)
-    
     if not user:
+        # Handle referral if present
+        referred_by = None
+        if context.args and context.args[0].startswith('ref_'):
+            try:
+                referred_by = int(context.args[0][4:])
+                referrer = get_user(referred_by)
+                if referrer and referred_by != user_id:
+                    # Add referral
+                    referrer['referrals'] = referrer.get('referrals', [])
+                    referrer['referrals'].append(user_id)
+                    add_diamonds(referred_by, 100)  # Referral bonus
+            except ValueError:
+                pass
+        
         user = create_user(user_id, username, first_name)
-        
-        # Ask for gender
-        keyboard = [
-            [InlineKeyboardButton("👨 Male", callback_data="gender_male")],
-            [InlineKeyboardButton("👩 Female", callback_data="gender_female")],
-            [InlineKeyboardButton("🔄 Other", callback_data="gender_other")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            f"{WELCOME_MESSAGE}\n\n👤 Please select your gender:",
-            reply_markup=reply_markup
-        )
-    else:
-        if user.get('banned'):
-            await update.message.reply_text("❌ You are banned from using this bot.")
-            return
-            
-        await update.message.reply_text(
-            f"🎉 Welcome back, {first_name}!\n\n"
-            f"💎 Diamonds: {user.get('diamonds', 0)}\n"
-            f"⭐ VIP Status: {'✅ Active' if is_vip(user_id) else '❌ Inactive'}\n\n"
-            f"Use /menu to access all features!"
-        )
-
-# Menu command
-async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /menu command."""
-    user_id = update.effective_user.id
-    user = get_user(user_id)
-    
-    if not user:
-        await update.message.reply_text("❌ Please use /start first.")
-        return
-    
-    keyboard = [
-        [InlineKeyboardButton("🏆 Referral TOP", callback_data="referral_top")],
-        [InlineKeyboardButton("👤 Profile", callback_data="profile")],
-        [InlineKeyboardButton("📜 Rules", callback_data="rules")],
-        [InlineKeyboardButton("📸 Photo Roulette", callback_data="photo_roulette")],
-        [InlineKeyboardButton("💎 Premium", callback_data="premium")],
-        [InlineKeyboardButton("⭐ Get VIP Status", callback_data="get_vip")],
-        [InlineKeyboardButton("🌐 Translate Status", callback_data="translate_status")],
-        [InlineKeyboardButton("⚙️ Settings", callback_data="settings")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    vip_status = "✅ Active" if is_vip(user_id) else "❌ Inactive"
-    
-    await update.message.reply_text(
-        f"🎛️ **Main Menu**\n\n"
-        f"👤 User: {user.get('first_name', 'Unknown')}\n"
-        f"💎 Diamonds: {user.get('diamonds', 0)}\n"
-        f"⭐ VIP: {vip_status}\n\n"
-        f"Choose an option below:",
-        reply_markup=reply_markup,
-        parse_mode=ParseMode.MARKDOWN
-    )
-
-# Stop command
-async def stop_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /stop command."""
-    user_id = update.effective_user.id
-    user = get_user(user_id)
-    
-    if not user:
-        await update.message.reply_text("❌ Please use /start first.")
-        return
-    
-    partner_id = disconnect_user(user_id)
-    
-    if partner_id:
-        await update.message.reply_text("🛑 Chat stopped! Use /next to find a new partner.")
-        try:
-            await context.bot.send_message(
-                partner_id, 
-                "💔 Your partner has left the chat. Use /next to find someone new!"
-            )
-        except:
-            pass
-    else:
-        await update.message.reply_text("❌ You're not in an active chat.")
-
-# Next command
-async def next_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /next command."""
-    user_id = update.effective_user.id
-    user = get_user(user_id)
-    
-    if not user:
-        await update.message.reply_text("❌ Please use /start first.")
-        return
+        if referred_by:
+            update_user(user_id, referred_by=referred_by)
+            add_diamonds(user_id, 50)  # Welcome bonus for referred user
     
     if user.get('banned'):
         await update.message.reply_text("❌ You are banned from using this bot.")
         return
     
-    # Disconnect from current partner
-    old_partner = disconnect_user(user_id)
-    if old_partner:
+    welcome_text = f"""
+🎉 <b>Welcome to Anonymous Chat Bot!</b> 🎉
+
+Hello {first_name}! 👋
+
+🌐 Connect with strangers anonymously
+💬 Chat without revealing your identity
+⭐ Upgrade to VIP for premium features
+💎 Current Diamonds: {user.get('diamonds', 0)}
+
+Use /menu to access all features or /next to start chatting!
+
+<i>By using this bot, you agree to follow our community rules. Type /rules to read them.</i>
+"""
+    
+    await update.message.reply_text(welcome_text, parse_mode=ParseMode.HTML)
+
+async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /stop command."""
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    if not user or user.get('banned'):
+        return
+    
+    partner_id = user.get('current_partner')
+    if partner_id:
+        disconnect_users(user_id, partner_id)
+        await update.message.reply_text("🚫 <b>Chat stopped!</b>\n\nUse /next to find a new partner.", parse_mode=ParseMode.HTML)
+        
+        # Notify partner
         try:
             await context.bot.send_message(
-                old_partner, 
-                "💔 Your partner has left the chat. Use /next to find someone new!"
+                chat_id=partner_id,
+                text="🚫 <b>Your partner left the chat.</b>\n\nUse /next to find a new partner.",
+                parse_mode=ParseMode.HTML
             )
-        except:
+        except Exception:
+            pass
+    else:
+        update_user(user_id, waiting_for_partner=False)
+        await update.message.reply_text("❌ You're not in a chat right now.")
+
+async def next_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /next command."""
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    if not user or user.get('banned'):
+        return
+    
+    # Disconnect from current partner if any
+    current_partner = user.get('current_partner')
+    if current_partner:
+        disconnect_users(user_id, current_partner)
+        try:
+            await context.bot.send_message(
+                chat_id=current_partner,
+                text="🔃 <b>Your partner found a new chat.</b>\n\nUse /next to find a new partner.",
+                parse_mode=ParseMode.HTML
+            )
+        except Exception:
             pass
     
-    # Find new partner
-    partner_id = find_partner(user_id)
+    # Set user as waiting for partner
+    update_user(user_id, waiting_for_partner=True)
+    
+    # Try to find a partner
+    partner_id = find_available_partner(user_id)
     
     if partner_id:
-        connect_users(user_id, partner_id)
+        connect_users(user_id, int(partner_id))
         
-        await update.message.reply_text(
-            "🎉 Connected! You can now start chatting!\n"
-            "🚫 Use /stop to end the chat\n"
-            "🔄 Use /next to find a new partner\n"
-            "🚨 Use /report to report inappropriate behavior"
-        )
+        # Get partner info
+        partner = get_user(int(partner_id))
+        user_vip_status = "⭐ VIP" if is_user_vip(user_id) else "👤 User"
+        partner_vip_status = "⭐ VIP" if is_user_vip(int(partner_id)) else "👤 User"
         
-        try:
-            await context.bot.send_message(
-                partner_id,
-                "🎉 Connected! You can now start chatting!\n"
-                "🚫 Use /stop to end the chat\n"
-                "🔄 Use /next to find a new partner\n"
-                "🚨 Use /report to report inappropriate behavior"
-            )
-        except:
-            disconnect_user(user_id)
-            await update.message.reply_text("❌ Connection failed. Please try again.")
+        user_msg = f"✅ <b>Connected!</b> 🎉\n\nYou're now chatting with a stranger.\nYour status: {user_vip_status}\nPartner status: {partner_vip_status}\n\nUse /stop to end chat or /report to report inappropriate behavior."
+        partner_msg = f"✅ <b>Connected!</b> 🎉\n\nYou're now chatting with a stranger.\nYour status: {partner_vip_status}\nPartner status: {user_vip_status}\n\nUse /stop to end chat or /report to report inappropriate behavior."
+        
+        await update.message.reply_text(user_msg, parse_mode=ParseMode.HTML)
+        await context.bot.send_message(chat_id=int(partner_id), text=partner_msg, parse_mode=ParseMode.HTML)
     else:
-        # Add user to waiting list
-        user['waiting'] = True
-        save_user(user_id, user)
-        
-        await update.message.reply_text(
-            "⏳ Searching for a partner... Please wait!\n"
-            "🔍 You'll be connected automatically when someone joins."
-        )
+        await update.message.reply_text("⏳ <b>Searching for a partner...</b>\n\nWe'll connect you as soon as someone becomes available!", parse_mode=ParseMode.HTML)
 
-# Bonus command
-async def bonus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /menu command."""
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    if not user or user.get('banned'):
+        return
+    
+    vip_status = "⭐ VIP User" if is_user_vip(user_id) else "👤 Regular User"
+    diamonds = user.get('diamonds', 0)
+    
+    menu_text = f"""
+🔑 <b>Main Menu</b>
+
+👋 Welcome, {user.get('first_name', 'User')}!
+💎 Diamonds: {diamonds}
+🏆 Status: {vip_status}
+
+Choose an option below:
+"""
+    
+    await update.message.reply_text(
+        menu_text,
+        reply_markup=get_main_menu_keyboard(),
+        parse_mode=ParseMode.HTML
+    )
+
+async def bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /bonus command."""
     user_id = update.effective_user.id
     user = get_user(user_id)
     
-    if not user:
-        await update.message.reply_text("❌ Please use /start first.")
+    if not user or user.get('banned'):
         return
     
     last_bonus = user.get('last_bonus')
@@ -177,626 +200,741 @@ async def bonus_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if last_bonus:
         last_bonus_date = datetime.fromisoformat(last_bonus)
-        if (now - last_bonus_date).days < 1:
-            next_bonus = last_bonus_date + timedelta(days=1)
-            hours_left = int((next_bonus - now).total_seconds() / 3600)
-            await update.message.reply_text(
-                f"⏰ You already claimed your daily bonus!\n"
-                f"Next bonus available in: {hours_left} hours"
-            )
+        if now.date() == last_bonus_date.date():
+            next_bonus = (last_bonus_date + timedelta(days=1)).strftime("%H:%M")
+            await update.message.reply_text(f"⏰ You already claimed your daily bonus today!\n\nNext bonus available tomorrow at {next_bonus}")
             return
     
-    # Give daily bonus
     add_diamonds(user_id, DAILY_BONUS)
-    user['last_bonus'] = now.isoformat()
-    save_user(user_id, user)
+    update_user(user_id, last_bonus=now.isoformat())
     
-    await update.message.reply_text(
-        f"🎁 Daily bonus claimed!\n"
-        f"💎 +{DAILY_BONUS} diamonds added to your account!\n"
-        f"💰 Total diamonds: {user.get('diamonds', 0) + DAILY_BONUS}"
-    )
+    await update.message.reply_text(f"🎁 <b>Daily Bonus Claimed!</b>\n\n+{DAILY_BONUS} 💎 Diamonds\n\nCome back tomorrow for another bonus!", parse_mode=ParseMode.HTML)
 
-# Profile command
-async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /profile command."""
     user_id = update.effective_user.id
     user = get_user(user_id)
     
-    if not user:
-        await update.message.reply_text("❌ Please use /start first.")
+    if not user or user.get('banned'):
         return
     
-    vip_status = "✅ Active" if is_vip(user_id) else "❌ Inactive"
-    vip_until = user.get('vip_until')
+    vip_status = "⭐ VIP User" if is_user_vip(user_id) else "👤 Regular User"
+    vip_until = ""
     
-    if vip_until and is_vip(user_id):
-        vip_date = datetime.fromisoformat(vip_until)
-        vip_info = f"Until: {vip_date.strftime('%Y-%m-%d %H:%M')}"
-    else:
-        vip_info = "Not active"
+    if is_user_vip(user_id) and user_id != ADMIN_ID:
+        vip_date = datetime.fromisoformat(user['vip_until'])
+        vip_until = f"\n⏰ VIP Until: {vip_date.strftime('%Y-%m-%d %H:%M')}"
+    elif user_id == ADMIN_ID:
+        vip_until = "\n👑 Lifetime VIP (Admin)"
     
     profile_text = f"""
-👤 **Your Profile**
+👤 <b>Your Profile</b>
 
-🆔 ID: {user_id}
-👤 Name: {user.get('first_name', 'Not set')}
-🚻 Gender: {user.get('gender', 'Not set')}
+🆔 User ID: {user_id}
+👤 Name: {user.get('first_name', 'Unknown')}
+📱 Username: @{user.get('username', 'None')}
+👫 Gender: {user.get('gender', 'Not set')}
 🎂 Age: {user.get('age', 'Not set')}
-🌍 Language: {SUPPORTED_LANGUAGES.get(user.get('language', 'en'), 'English')}
+🌐 Language: {user.get('language', 'en')}
 💎 Diamonds: {user.get('diamonds', 0)}
-⭐ VIP Status: {vip_status}
-📅 VIP Info: {vip_info}
-👥 Referrals: {user.get('referral_count', 0)}
+🏆 Status: {vip_status}{vip_until}
+📈 Referrals: {len(user.get('referrals', []))}
 📸 Photo Likes: {user.get('photo_likes', 0)}
-📅 Joined: {user.get('registered', 'Unknown')[:10]}
 """
     
     keyboard = [
-        [InlineKeyboardButton("✏️ Edit Profile", callback_data="edit_profile")]
+        [InlineKeyboardButton("⚙️ Edit Profile", callback_data="edit_profile")],
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
         profile_text,
-        reply_markup=reply_markup,
-        parse_mode=ParseMode.MARKDOWN
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=ParseMode.HTML
     )
 
-# Rules command
-async def rules_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /rules command."""
     try:
-        with open(RULES_FILE, 'r') as f:
+        with open('rules.txt', 'r', encoding='utf-8') as f:
             rules_text = f.read()
-    except:
+    except FileNotFoundError:
         rules_text = """
-📜 **Community Rules**
+📋 <b>Community Rules</b>
 
-1. 🚫 No harassment or bullying
-2. 🔞 No explicit sexual content
-3. 👶 No content involving minors
-4. 🤝 Be respectful to other users
-5. 🚭 No spam or advertising
-6. 🔒 Protect your privacy
-7. 🚨 Report inappropriate behavior
-8. 💎 No diamond farming or cheating
-9. 🎭 One account per person
-10. ⚖️ Follow Telegram's Terms of Service
+1. 🚫 No harassment, bullying, or inappropriate behavior
+2. 🔞 No sharing of adult content or explicit material
+3. 💬 Be respectful and kind to other users
+4. 🚫 No spam, advertising, or promotional content
+5. 🔒 Respect privacy - don't ask for personal information
+6. 🚫 No hate speech, discrimination, or offensive language
+7. 👮‍♂️ Report inappropriate behavior using /report
+8. 🎯 Use the bot for its intended purpose only
+9. 🚫 No ban evasion or creating multiple accounts
+10. ⚖️ Admin decisions are final
 
-❗ Violation of these rules may result in permanent ban.
+<b>Violations may result in temporary or permanent bans.</b>
+
+Thank you for helping us maintain a safe and friendly community! 🤝
 """
     
-    await update.message.reply_text(rules_text, parse_mode=ParseMode.MARKDOWN)
-
-# Report command
-async def report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /report command."""
-    user_id = update.effective_user.id
-    user = get_user(user_id)
-    
-    if not user:
-        await update.message.reply_text("❌ Please use /start first.")
-        return
-    
-    partner_id = user.get('partner')
-    if not partner_id:
-        await update.message.reply_text("❌ You're not in an active chat.")
-        return
-    
-    # Save complaint
-    complaints = load_complaints()
-    complaint_id = f"{user_id}_{partner_id}_{int(datetime.now().timestamp())}"
-    
-    complaints[complaint_id] = {
-        'reporter': user_id,
-        'reported': partner_id,
-        'timestamp': datetime.now().isoformat(),
-        'status': 'pending'
-    }
-    
-    save_complaints(complaints)
-    
-    # Notify admin
-    try:
-        await context.bot.send_message(
-            ADMIN_ID,
-            f"🚨 **New Report**\n\n"
-            f"Reporter: {user_id}\n"
-            f"Reported: {partner_id}\n"
-            f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n"
-            f"Complaint ID: {complaint_id}",
-            parse_mode=ParseMode.MARKDOWN
-        )
-    except:
-        pass
+    keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]]
     
     await update.message.reply_text(
-        "✅ Report submitted successfully!\n"
-        "🔍 Our team will review it shortly.\n"
-        "⚖️ Appropriate action will be taken if needed."
+        rules_text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=ParseMode.HTML
     )
 
-# Button callback handler
-async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle inline keyboard button callbacks."""
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = query.from_user.id
-    data = query.data
-    
-    user = get_user(user_id)
-    if not user:
-        await query.edit_message_text("❌ Please use /start first.")
-        return
-    
-    # Gender selection
-    if data.startswith("gender_"):
-        gender = data.split("_")[1]
-        user['gender'] = gender
-        save_user(user_id, user)
-        
-        # Ask for age
-        keyboard = [
-            [InlineKeyboardButton("📝 Set Age", callback_data="set_age")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            f"✅ Gender set to: {gender.title()}\n\n"
-            f"🎂 Now please set your age:",
-            reply_markup=reply_markup
-        )
-    
-    # Set age
-    elif data == "set_age":
-        await query.edit_message_text(
-            "🎂 Please type your age (18-99):"
-        )
-        context.user_data['waiting_for_age'] = True
-    
-    # Referral TOP
-    elif data == "referral_top":
-        users = load_users()
-        top_referrers = sorted(
-            [(uid, u) for uid, u in users.items()], 
-            key=lambda x: x[1].get('referral_count', 0),
-            reverse=True
-        )[:10]
-        
-        top_text = "🏆 **Referral TOP 10**\n\n"
-        for i, (uid, u) in enumerate(top_referrers, 1):
-            name = u.get('first_name', 'Anonymous')
-            refs = u.get('referral_count', 0)
-            if u.get('settings', {}).get('show_profile', True):
-                top_text += f"{i}. {name} - {refs} referrals\n"
-            else:
-                top_text += f"{i}. Anonymous - {refs} referrals\n"
-        
-        await query.edit_message_text(top_text, parse_mode=ParseMode.MARKDOWN)
-    
-    # Profile
-    elif data == "profile":
-        await profile_command(update, context)
-    
-    # Rules
-    elif data == "rules":
-        await rules_command(update, context)
-    
-    # Photo Roulette
-    elif data == "photo_roulette":
-        keyboard = [
-            [InlineKeyboardButton("📤 Upload Photo", callback_data="upload_photo")],
-            [InlineKeyboardButton("👀 View Photos", callback_data="view_photos")],
-            [InlineKeyboardButton("📊 My Stats", callback_data="photo_stats")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            "📸 **Photo Roulette**\n\n"
-            "Upload your photos and rate others!\n"
-            "Get likes and become popular!\n\n"
-            "⭐ VIP users get priority display",
-            reply_markup=reply_markup
-        )
-    
-    # Premium
-    elif data == "premium":
-        await query.edit_message_text(VIP_FEATURES, parse_mode=ParseMode.MARKDOWN)
-    
-    # Get VIP
-    elif data == "get_vip":
-        keyboard = []
-        for days, cost in VIP_PACKAGES.items():
-            keyboard.append([InlineKeyboardButton(
-                f"{days} Day{'s' if days > 1 else ''} - {cost} 💎",
-                callback_data=f"buy_vip_{days}"
-            )])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            f"⭐ **Get VIP Status**\n\n"
-            f"💎 Your diamonds: {user.get('diamonds', 0)}\n\n"
-            f"Choose a VIP package:",
-            reply_markup=reply_markup
-        )
-    
-    # Buy VIP
-    elif data.startswith("buy_vip_"):
-        days = int(data.split("_")[2])
-        cost = VIP_PACKAGES[days]
-        
-        if user.get('diamonds', 0) >= cost:
-            deduct_diamonds(user_id, cost)
-            add_vip_days(user_id, days)
-            
-            await query.edit_message_text(
-                f"🎉 **VIP Activated!**\n\n"
-                f"⭐ VIP for {days} day{'s' if days > 1 else ''}\n"
-                f"💎 -{cost} diamonds\n"
-                f"💰 Remaining: {user.get('diamonds', 0) - cost} diamonds\n\n"
-                f"✨ Enjoy your VIP features!"
-            )
-        else:
-            await query.edit_message_text(
-                f"❌ **Insufficient Diamonds**\n\n"
-                f"💎 Required: {cost}\n"
-                f"💰 You have: {user.get('diamonds', 0)}\n"
-                f"📈 Need: {cost - user.get('diamonds', 0)} more diamonds\n\n"
-                f"🎁 Use /bonus for daily diamonds!"
-            )
-    
-    # Translate Status
-    elif data == "translate_status":
-        if not is_vip(user_id):
-            await query.edit_message_text(
-                "❌ **Translation is a VIP feature!**\n\n"
-                "⭐ Get VIP to unlock auto-translation\n"
-                "🌍 Chat with people from any country!"
-            )
-            return
-        
-        translation_status = user.get('settings', {}).get('translation', False)
-        status_text = "🟢 ON" if translation_status else "🔴 OFF"
-        
-        keyboard = [
-            [InlineKeyboardButton("🟢 Turn ON", callback_data="translation_on")],
-            [InlineKeyboardButton("🔴 Turn OFF", callback_data="translation_off")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            f"🌐 **Translation Status: {status_text}**\n\n"
-            f"💡 Translation Power: {'Enabled' if translation_status else 'Disabled'}\n\n"
-            f"When enabled, messages will be automatically\n"
-            f"translated to your preferred language!",
-            reply_markup=reply_markup
-        )
-    
-    # Translation controls
-    elif data == "translation_on":
-        if not user.get('settings'):
-            user['settings'] = {}
-        user['settings']['translation'] = True
-        save_user(user_id, user)
-        
-        await query.edit_message_text(
-            "✅ **Translation Enabled!**\n\n"
-            "🌍 Messages will now be auto-translated\n"
-            "🎯 Based on your language preference"
-        )
-    
-    elif data == "translation_off":
-        if not user.get('settings'):
-            user['settings'] = {}
-        user['settings']['translation'] = False
-        save_user(user_id, user)
-        
-        await query.edit_message_text(
-            "❌ **Translation Disabled**\n\n"
-            "📝 You'll receive messages in original language"
-        )
-    
-    # Settings
-    elif data == "settings":
-        vip_emoji = "⭐" if is_vip(user_id) else "🔒"
-        
-        keyboard = [
-            [InlineKeyboardButton("👤 Edit Name", callback_data="edit_name")],
-            [InlineKeyboardButton("🚻 Change Gender", callback_data="change_gender")],
-            [InlineKeyboardButton("🎂 Update Age", callback_data="update_age")],
-            [InlineKeyboardButton("🌍 Language", callback_data="change_language")],
-            [InlineKeyboardButton(f"{vip_emoji} VIP Settings", callback_data="vip_settings")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await query.edit_message_text(
-            "⚙️ **Settings Menu**\n\n"
-            "Configure your profile and preferences:",
-            reply_markup=reply_markup
-        )
-
-# Message handler
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle all non-command messages."""
     user_id = update.effective_user.id
     user = get_user(user_id)
     
-    if not user:
-        await update.message.reply_text("❌ Please use /start first.")
+    if not user or user.get('banned'):
         return
     
-    # Check if user is setting age
-    if context.user_data.get('waiting_for_age'):
-        try:
-            age = int(update.message.text)
-            if 18 <= age <= 99:
-                user['age'] = age
-                save_user(user_id, user)
-                context.user_data['waiting_for_age'] = False
-                
-                await update.message.reply_text(
-                    f"✅ Age set to: {age}\n\n"
-                    f"🎉 Setup complete! Use /next to start chatting!"
+    partner_id = user.get('current_partner')
+    if not partner_id:
+        await update.message.reply_text("❌ You're not in a chat. Use /next to find a partner!")
+        return
+    
+    # Check if partner still exists and is connected
+    partner = get_user(partner_id)
+    if not partner or partner.get('current_partner') != user_id:
+        update_user(user_id, current_partner=None)
+        await update.message.reply_text("❌ Your partner has disconnected. Use /next to find a new one!")
+        return
+    
+    try:
+        message_type = "text"
+        content = ""
+        
+        if update.message.text:
+            message_type = "text"
+            content = update.message.text
+            
+            # Handle translation if enabled
+            translated_content, was_translated = get_translation_info(user_id, partner_id, content)
+            
+            await context.bot.send_message(
+                chat_id=partner_id,
+                text=translated_content,
+                parse_mode=ParseMode.HTML if was_translated else None
+            )
+        
+        elif update.message.sticker:
+            message_type = "sticker"
+            content = update.message.sticker.file_id
+            await context.bot.send_sticker(chat_id=partner_id, sticker=update.message.sticker.file_id)
+        
+        elif update.message.photo:
+            message_type = "photo"
+            content = update.message.photo[-1].file_id
+            caption = update.message.caption or ""
+            
+            # Handle photo caption translation
+            if caption:
+                translated_caption, was_translated = get_translation_info(user_id, partner_id, caption)
+                await context.bot.send_photo(
+                    chat_id=partner_id,
+                    photo=update.message.photo[-1].file_id,
+                    caption=translated_caption,
+                    parse_mode=ParseMode.HTML if was_translated else None
                 )
             else:
-                await update.message.reply_text("❌ Please enter an age between 18 and 99.")
-        except ValueError:
-            await update.message.reply_text("❌ Please enter a valid number.")
-        return
-    
-    if user.get('banned'):
-        await update.message.reply_text("❌ You are banned from using this bot.")
-        return
-    
-    partner_id = user.get('partner')
-    if not partner_id:
-        await update.message.reply_text(
-            "❌ You're not connected to anyone.\n"
-            "🔍 Use /next to find a chat partner!"
-        )
-        return
-    
-    # Forward message to partner
-    try:
-        message_text = update.message.text or update.message.caption or ""
+                await context.bot.send_photo(chat_id=partner_id, photo=update.message.photo[-1].file_id)
         
-        # Log the message
-        log_message(user_id, partner_id, "text", message_text)
+        elif update.message.voice:
+            message_type = "voice"
+            content = update.message.voice.file_id
+            await context.bot.send_voice(chat_id=partner_id, voice=update.message.voice.file_id)
         
-        # Check for translation
-        if message_text:
-            translated_text, was_translated = get_translated_message(user_id, partner_id, message_text)
-            
-            if update.message.text:
-                await context.bot.send_message(partner_id, translated_text)
-            elif update.message.photo:
-                await context.bot.send_photo(
-                    partner_id, 
-                    update.message.photo[-1].file_id,
-                    caption=translated_text
-                )
-            elif update.message.voice:
-                await context.bot.send_voice(
-                    partner_id,
-                    update.message.voice.file_id,
-                    caption=translated_text
-                )
-            elif update.message.sticker:
-                await context.bot.send_sticker(partner_id, update.message.sticker.file_id)
-                if translated_text:
-                    await context.bot.send_message(partner_id, translated_text)
-        else:
-            # Forward non-text messages
-            if update.message.photo:
-                await context.bot.send_photo(partner_id, update.message.photo[-1].file_id)
-            elif update.message.voice:
-                await context.bot.send_voice(partner_id, update.message.voice.file_id)
-            elif update.message.sticker:
-                await context.bot.send_sticker(partner_id, update.message.sticker.file_id)
-            elif update.message.document:
-                await context.bot.send_document(partner_id, update.message.document.file_id)
-            elif update.message.video:
-                await context.bot.send_video(partner_id, update.message.video.file_id)
-            elif update.message.audio:
-                await context.bot.send_audio(partner_id, update.message.audio.file_id)
-            
+        elif update.message.video:
+            message_type = "video"
+            content = update.message.video.file_id
+            await context.bot.send_video(chat_id=partner_id, video=update.message.video.file_id)
+        
+        elif update.message.document:
+            message_type = "document"
+            content = update.message.document.file_id
+            await context.bot.send_document(chat_id=partner_id, document=update.message.document.file_id)
+        
+        # Log the message for admin monitoring
+        log_chat_message(user_id, partner_id, message_type, content)
+        
     except Exception as e:
         logger.error(f"Error forwarding message: {e}")
-        # Partner might have blocked the bot or left
-        disconnect_user(user_id)
-        await update.message.reply_text(
-            "💔 Connection lost. Your partner may have left.\n"
-            "🔍 Use /next to find a new partner!"
-        )
+        await update.message.reply_text("❌ Failed to send message. Your partner may have disconnected.")
 
-# Admin Commands
-
-async def ban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ban a user (Admin only)."""
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ Admin only command.")
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle callback queries from inline keyboards."""
+    query = update.callback_query
+    await query.answer()
+    
+    user_id = query.from_user.id
+    user = get_user(user_id)
+    
+    if not user or user.get('banned'):
         return
     
-    if not context.args:
-        await update.message.reply_text("❌ Usage: /ban <user_id>")
-        return
+    data = query.data
     
-    try:
-        target_id = int(context.args[0])
-        user = get_user(target_id)
-        
-        if not user:
-            await update.message.reply_text("❌ User not found.")
-            return
-        
-        user['banned'] = True
-        save_user(target_id, user)
-        
-        # Disconnect user if in chat
-        disconnect_user(target_id)
-        
-        await update.message.reply_text(f"✅ User {target_id} has been banned.")
-        
-        # Notify user
-        try:
-            await context.bot.send_message(
-                target_id,
-                "🚫 You have been banned from the bot for violating community rules."
-            )
-        except:
-            pass
-            
-    except ValueError:
-        await update.message.reply_text("❌ Invalid user ID.")
+    if data == "referral_top":
+        await show_referral_top(query, context)
+    elif data == "profile":
+        await show_profile_menu(query, context)
+    elif data == "rules":
+        await show_rules(query, context)
+    elif data == "photo_roulette":
+        await show_photo_roulette(query, context)
+    elif data == "premium":
+        await show_premium_features(query, context)
+    elif data == "get_vip":
+        await show_vip_packages(query, context)
+    elif data == "translate_status":
+        await show_translate_status(query, context)
+    elif data == "settings":
+        await show_settings(query, context)
+    elif data == "back_to_menu":
+        await show_main_menu(query, context)
+    elif data.startswith("buy_vip_"):
+        await handle_vip_purchase(query, context, data)
+    elif data.startswith("toggle_translation"):
+        await toggle_translation(query, context)
+    elif data.startswith("set_language_"):
+        await set_language(query, context, data)
+    elif data.startswith("set_gender_"):
+        await set_gender(query, context, data)
+    elif data.startswith("photo_"):
+        await handle_photo_action(query, context, data)
 
-async def unban_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Unban a user (Admin only)."""
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ Admin only command.")
-        return
+async def show_referral_top(query, context):
+    """Show top referrals."""
+    top_referrals = get_top_referrals()
     
-    if not context.args:
-        await update.message.reply_text("❌ Usage: /unban <user_id>")
-        return
+    text = "🔝 <b>Top Referrals</b>\n\n"
     
-    try:
-        target_id = int(context.args[0])
-        user = get_user(target_id)
-        
-        if not user:
-            await update.message.reply_text("❌ User not found.")
-            return
-        
-        user['banned'] = False
-        save_user(target_id, user)
-        
-        await update.message.reply_text(f"✅ User {target_id} has been unbanned.")
-        
-        # Notify user
-        try:
-            await context.bot.send_message(
-                target_id,
-                "🎉 You have been unbanned! You can now use the bot again."
-            )
-        except:
-            pass
-            
-    except ValueError:
-        await update.message.reply_text("❌ Invalid user ID.")
+    if not top_referrals:
+        text += "📭 No referrals yet!\n\nInvite friends using your referral link to appear here."
+    else:
+        for i, ref in enumerate(top_referrals, 1):
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            username = f"@{ref['username']}" if ref['username'] else "Hidden"
+            text += f"{medal} {ref['first_name']} ({username}) - {ref['referral_count']} referrals\n"
+    
+    user_id = query.from_user.id
+    referral_link = f"https://t.me/{context.bot.username}?start=ref_{user_id}"
+    text += f"\n🔗 <b>Your referral link:</b>\n<code>{referral_link}</code>"
+    
+    keyboard = [[InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]]
+    
+    await query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=ParseMode.HTML
+    )
 
-async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show bot statistics (Admin only)."""
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ Admin only command.")
-        return
+async def show_profile_menu(query, context):
+    """Show profile menu."""
+    user_id = query.from_user.id
+    user = get_user(user_id)
     
-    stats = get_stats()
+    vip_status = "⭐ VIP User" if is_user_vip(user_id) else "👤 Regular User"
     
-    stats_text = f"""
-📊 **Bot Statistics**
+    text = f"""
+👤 <b>Your Profile</b>
 
-👥 Total Users: {stats['total_users']}
-💬 Active Chats: {stats['active_chats']}
-⏳ Waiting Users: {stats['waiting_users']}
-⭐ VIP Users: {stats['vip_users']}
-🚫 Banned Users: {stats['banned_users']}
-🚨 Total Complaints: {stats['total_complaints']}
+👤 Name: {user.get('first_name', 'Unknown')}
+👫 Gender: {user.get('gender', 'Not set')}
+🎂 Age: {user.get('age', 'Not set')}
+🌐 Language: {user.get('language', 'en')}
+💎 Diamonds: {user.get('diamonds', 0)}
+🏆 Status: {vip_status}
+📈 Referrals: {len(user.get('referrals', []))}
 """
     
-    await update.message.reply_text(stats_text, parse_mode=ParseMode.MARKDOWN)
+    keyboard = [
+        [InlineKeyboardButton("⚙️ Edit Profile", callback_data="edit_profile")],
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]
+    ]
+    
+    await query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=ParseMode.HTML
+    )
 
-async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Broadcast message to all users (Admin only)."""
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ Admin only command.")
+async def show_rules(query, context):
+    """Show rules."""
+    await rules(query, context)
+
+async def show_photo_roulette(query, context):
+    """Show photo roulette menu."""
+    from photo_roulette import get_user_photos, get_random_photo
+    
+    user_id = query.from_user.id
+    user_photos = get_user_photos(user_id)
+    
+    text = """
+📸 <b>Photo Roulette</b>
+
+Upload your photos for others to rate!
+Get diamonds when people like your photos.
+
+Your photos: {}
+Total likes: {}
+"""
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("📤 Upload Photo", callback_data="photo_upload"),
+            InlineKeyboardButton("🎲 Rate Photos", callback_data="photo_rate")
+        ],
+        [
+            InlineKeyboardButton("📊 My Stats", callback_data="photo_stats"),
+            InlineKeyboardButton("🔙 Back", callback_data="back_to_menu")
+        ]
+    ]
+    
+    await query.edit_message_text(
+        text.format(len(user_photos), sum(p.get('likes', 0) for p in user_photos)),
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=ParseMode.HTML
+    )
+
+async def show_premium_features(query, context):
+    """Show premium features."""
+    text = """
+💎 <b>Premium Features</b>
+
+⭐ VIP Benefits:
+• 🎯 Gender matching
+• 🎂 Age range selection
+• 🌐 Auto translation
+• 👀 Profile preview
+• 📸 Photo roulette priority
+• 💬 VIP badge in chats
+
+🎁 Daily bonuses and special rewards!
+"""
+    
+    keyboard = [
+        [InlineKeyboardButton("⭐ Get VIP", callback_data="get_vip")],
+        [InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")]
+    ]
+    
+    await query.edit_message_text(
+        text,
+        reply_markup=InlineKeyMarkup(keyboard),
+        parse_mode=ParseMode.HTML
+    )
+
+async def show_vip_packages(query, context):
+    """Show VIP packages."""
+    user_id = query.from_user.id
+    user = get_user(user_id)
+    diamonds = user.get('diamonds', 0)
+    
+    text = f"""
+⭐ <b>VIP Packages</b>
+
+💎 Your Diamonds: {diamonds}
+
+Choose a VIP package:
+"""
+    
+    keyboard = []
+    for package_id, package_info in VIP_PACKAGES.items():
+        days = package_info['days']
+        price = package_info['price']
+        day_text = "day" if days == 1 else "days"
+        affordable = "✅" if diamonds >= price else "❌"
+        
+        keyboard.append([
+            InlineKeyboardButton(
+                f"{affordable} {days} {day_text} - {price} 💎",
+                callback_data=f"buy_vip_{package_id}"
+            )
+        ])
+    
+    keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")])
+    
+    await query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=ParseMode.HTML
+    )
+
+async def show_translate_status(query, context):
+    """Show translation status."""
+    user_id = query.from_user.id
+    user = get_user(user_id)
+    
+    is_vip = is_user_vip(user_id)
+    translation_enabled = user.get('translation_enabled', False)
+    
+    if not is_vip:
+        text = """
+🌐 <b>Translation Power</b>
+
+❌ VIP Required
+You need VIP status to use auto-translation feature.
+
+Upgrade to VIP to translate messages automatically!
+"""
+        keyboard = [
+            [InlineKeyboardButton("⭐ Get VIP", callback_data="get_vip")],
+            [InlineKeyboardButton("🔙 Back", callback_data="back_to_menu")]
+        ]
+    else:
+        status = "🟢 ON" if translation_enabled else "🔴 OFF"
+        text = f"""
+🌐 <b>Translation Power</b>
+
+Status: {status}
+
+When enabled, messages will be automatically translated between you and your chat partner if you speak different languages.
+"""
+        
+        keyboard = [
+            [
+                InlineKeyboardButton("🟢 Turn ON", callback_data="toggle_translation_on"),
+                InlineKeyboardButton("🔴 Turn OFF", callback_data="toggle_translation_off")
+            ],
+            [InlineKeyboardButton("🔙 Back", callback_data="back_to_menu")]
+        ]
+    
+    await query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=ParseMode.HTML
+    )
+
+async def show_settings(query, context):
+    """Show settings menu."""
+    user_id = query.from_user.id
+    user = get_user(user_id)
+    is_vip = is_user_vip(user_id)
+    
+    text = f"""
+⚙️ <b>Settings</b>
+
+Current Settings:
+👫 Gender: {user.get('gender', 'Not set')}
+🎂 Age: {user.get('age', 'Not set')}
+🌐 Language: {user.get('language', 'en')}
+
+{('⭐ VIP Preferences:' if is_vip else '🔒 VIP Only:')}
+🎯 Preferred Gender: {user.get('preferred_gender', 'any') if is_vip else 'Locked'}
+📊 Age Range: {user.get('preferred_age_min', 18)}-{user.get('preferred_age_max', 99) if is_vip else 'Locked'}
+"""
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("👫 Set Gender", callback_data="set_gender"),
+            InlineKeyboardButton("🎂 Set Age", callback_data="set_age")
+        ],
+        [InlineKeyboardButton("🌐 Set Language", callback_data="set_language")]
+    ]
+    
+    if is_vip:
+        keyboard.append([
+            InlineKeyboardButton("🎯 VIP Preferences", callback_data="vip_preferences")
+        ])
+    
+    keyboard.append([InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_menu")])
+    
+    await query.edit_message_text(
+        text,
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        parse_mode=ParseMode.HTML
+    )
+
+async def show_main_menu(query, context):
+    """Show main menu."""
+    user_id = query.from_user.id
+    user = get_user(user_id)
+    
+    vip_status = "⭐ VIP User" if is_user_vip(user_id) else "👤 Regular User"
+    diamonds = user.get('diamonds', 0)
+    
+    menu_text = f"""
+🔑 <b>Main Menu</b>
+
+👋 Welcome, {user.get('first_name', 'User')}!
+💎 Diamonds: {diamonds}
+🏆 Status: {vip_status}
+
+Choose an option below:
+"""
+    
+    await query.edit_message_text(
+        menu_text,
+        reply_markup=get_main_menu_keyboard(),
+        parse_mode=ParseMode.HTML
+    )
+
+async def handle_vip_purchase(query, context, data):
+    """Handle VIP package purchase."""
+    user_id = query.from_user.id
+    user = get_user(user_id)
+    
+    package_id = data.replace("buy_vip_", "")
+    if package_id not in VIP_PACKAGES:
+        return
+    
+    package = VIP_PACKAGES[package_id]
+    price = package['price']
+    days = package['days']
+    
+    if user.get('diamonds', 0) < price:
+        await query.answer("❌ Not enough diamonds!", show_alert=True)
+        return
+    
+    if spend_diamonds(user_id, price):
+        give_vip(user_id, days)
+        
+        day_text = "day" if days == 1 else "days"
+        await query.answer(f"✅ VIP activated for {days} {day_text}!", show_alert=True)
+        
+        # Show updated menu
+        await show_main_menu(query, context)
+    else:
+        await query.answer("❌ Purchase failed!", show_alert=True)
+
+async def toggle_translation(query, context):
+    """Toggle translation on/off."""
+    user_id = query.from_user.id
+    data = query.data
+    
+    if not is_user_vip(user_id):
+        await query.answer("❌ VIP required!", show_alert=True)
+        return
+    
+    enabled = data == "toggle_translation_on"
+    update_user(user_id, translation_enabled=enabled)
+    
+    status = "enabled" if enabled else "disabled"
+    await query.answer(f"🌐 Translation {status}!", show_alert=True)
+    
+    await show_translate_status(query, context)
+
+# Admin commands
+async def report_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /report command."""
+    user_id = update.effective_user.id
+    user = get_user(user_id)
+    
+    if not user or user.get('banned'):
+        return
+    
+    partner_id = user.get('current_partner')
+    if not partner_id:
+        await update.message.reply_text("❌ You're not in a chat to report anyone.")
+        return
+    
+    reason = " ".join(context.args) if context.args else "No reason provided"
+    complaint_id = add_complaint(user_id, partner_id, reason)
+    
+    # Notify admin
+    try:
+        admin_text = f"""
+🚨 <b>New Report</b>
+
+Report ID: {complaint_id}
+Reporter: {user_id} ({user.get('first_name', 'Unknown')})
+Reported User: {partner_id}
+Reason: {reason}
+Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+"""
+        await context.bot.send_message(
+            chat_id=ADMIN_ID,
+            text=admin_text,
+            parse_mode=ParseMode.HTML
+        )
+    except Exception:
+        pass
+    
+    await update.message.reply_text("✅ Report submitted. Thank you for helping keep our community safe!")
+
+async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /ban command (Admin only)."""
+    if not is_admin(update.effective_user.id):
         return
     
     if not context.args:
-        await update.message.reply_text("❌ Usage: /broadcast <message>")
+        await update.message.reply_text("Usage: /ban <user_id>")
+        return
+    
+    try:
+        target_user_id = int(context.args[0])
+        if db_ban_user(target_user_id):
+            # Disconnect user if in chat
+            disconnect_users(target_user_id)
+            await update.message.reply_text(f"✅ User {target_user_id} has been banned.")
+        else:
+            await update.message.reply_text("❌ User not found.")
+    except ValueError:
+        await update.message.reply_text("❌ Invalid user ID.")
+
+async def unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /unban command (Admin only)."""
+    if not is_admin(update.effective_user.id):
+        return
+    
+    if not context.args:
+        await update.message.reply_text("Usage: /unban <user_id>")
+        return
+    
+    try:
+        target_user_id = int(context.args[0])
+        if db_unban_user(target_user_id):
+            await update.message.reply_text(f"✅ User {target_user_id} has been unbanned.")
+        else:
+            await update.message.reply_text("❌ User not found.")
+    except ValueError:
+        await update.message.reply_text("❌ Invalid user ID.")
+
+async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /stats command (Admin only)."""
+    if not is_admin(update.effective_user.id):
+        return
+    
+    stats = get_user_stats()
+    
+    stats_text = f"""
+📊 <b>Bot Statistics</b>
+
+👥 Total Users: {stats['total_users']}
+💬 Active Chats: {stats['active_users']}
+⭐ VIP Users: {stats['vip_users']}
+🚫 Banned Users: {stats['banned_users']}
+📝 Total Complaints: {stats['total_complaints']}
+"""
+    
+    await update.message.reply_text(stats_text, parse_mode=ParseMode.HTML)
+
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /broadcast command (Admin only)."""
+    if not is_admin(update.effective_user.id):
+        return
+    
+    if not context.args:
+        await update.message.reply_text("Usage: /broadcast <message>")
         return
     
     message = " ".join(context.args)
-    users = load_users()
+    users = load_json('users.json')
     
     sent = 0
     failed = 0
     
-    for user_id in users.keys():
+    for user_id in users:
         try:
-            await context.bot.send_message(int(user_id), f"📢 **Admin Broadcast**\n\n{message}", parse_mode=ParseMode.MARKDOWN)
+            await context.bot.send_message(
+                chat_id=int(user_id),
+                text=f"📢 <b>Announcement</b>\n\n{message}",
+                parse_mode=ParseMode.HTML
+            )
             sent += 1
-        except:
+        except Exception:
             failed += 1
     
-    await update.message.reply_text(
-        f"📢 Broadcast complete!\n"
-        f"✅ Sent: {sent}\n"
-        f"❌ Failed: {failed}"
-    )
+    await update.message.reply_text(f"✅ Broadcast sent to {sent} users. {failed} failed.")
 
-async def give_diamonds_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Give diamonds to a user (Admin only)."""
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ Admin only command.")
+async def give_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /givevip command (Admin only)."""
+    if not is_admin(update.effective_user.id):
         return
     
     if len(context.args) != 2:
-        await update.message.reply_text("❌ Usage: /give_diamonds <user_id> <amount>")
+        await update.message.reply_text("Usage: /givevip <user_id> <days>")
         return
     
     try:
-        target_id = int(context.args[0])
+        target_user_id = int(context.args[0])
+        days = int(context.args[1])
+        
+        if give_vip(target_user_id, days):
+            await update.message.reply_text(f"✅ Gave {days} days of VIP to user {target_user_id}")
+        else:
+            await update.message.reply_text("❌ User not found.")
+    except ValueError:
+        await update.message.reply_text("❌ Invalid arguments.")
+
+async def give_diamonds(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /givediamonds command (Admin only)."""
+    if not is_admin(update.effective_user.id):
+        return
+    
+    if len(context.args) != 2:
+        await update.message.reply_text("Usage: /givediamonds <user_id> <amount>")
+        return
+    
+    try:
+        target_user_id = int(context.args[0])
         amount = int(context.args[1])
         
-        user = get_user(target_id)
-        if not user:
-            await update.message.reply_text("❌ User not found.")
+        new_balance = add_diamonds(target_user_id, amount)
+        await update.message.reply_text(f"✅ Gave {amount} diamonds to user {target_user_id}. New balance: {new_balance}")
+    except ValueError:
+        await update.message.reply_text("❌ Invalid arguments.")
+
+async def view_complaints(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /complaints command (Admin only)."""
+    if not is_admin(update.effective_user.id):
+        return
+    
+    complaints = load_json(COMPLAINTS_DB)
+    
+    if not complaints:
+        await update.message.reply_text("📭 No complaints found.")
+        return
+    
+    text = "📝 <b>Recent Complaints</b>\n\n"
+    
+    # Show last 10 complaints
+    recent = list(complaints.values())[-10:]
+    for complaint in recent:
+        text += f"ID: {complaint['id']}\n"
+        text += f"Reporter: {complaint['reporter_id']}\n"
+        text += f"Reported: {complaint['reported_id']}\n"
+        text += f"Reason: {complaint['reason']}\n"
+        text += f"Time: {complaint['timestamp'][:19]}\n\n"
+    
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+
+async def view_user_chats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /viewchats command (Admin only)."""
+    if not is_admin(update.effective_user.id):
+        return
+    
+    if not context.args:
+        await update.message.reply_text("Usage: /viewchats <user_id>")
+        return
+    
+    try:
+        target_user_id = int(context.args[0])
+        logs = load_json(CHAT_LOGS_DB)
+        
+        user_logs = [log for log in logs.values() 
+                    if log['sender_id'] == target_user_id or log['receiver_id'] == target_user_id]
+        
+        if not user_logs:
+            await update.message.reply_text(f"📭 No chat logs found for user {target_user_id}")
             return
         
-        add_diamonds(target_id, amount)
+        text = f"💬 <b>Chat Logs for User {target_user_id}</b>\n\n"
         
-        await update.message.reply_text(f"✅ Gave {amount} 💎 to user {target_id}")
+        # Show last 20 messages
+        recent_logs = user_logs[-20:]
+        for log in recent_logs:
+            direction = "→" if log['sender_id'] == target_user_id else "←"
+            text += f"{direction} {log['message_type']}: {log['content'][:50]}...\n"
+            text += f"   {log['timestamp'][:19]}\n\n"
         
-        # Notify user
-        try:
-            await context.bot.send_message(
-                target_id,
-                f"🎁 You received {amount} 💎 diamonds from admin!\n"
-                f"💰 Total: {user.get('diamonds', 0) + amount} 💎"
-            )
-        except:
-            pass
-            
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        
     except ValueError:
-        await update.message.reply_text("❌ Invalid user ID or amount.")
-
-async def view_chats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """View chat logs (Admin only)."""
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ Admin only command.")
-        return
-    
-    chat_logs = load_chat_logs()
-    
-    if not chat_logs:
-        await update.message.reply_text("📭 No chat logs available.")
-        return
-    
-    logs_text = "📋 **Recent Chat Logs**\n\n"
-    
-    for chat_key, messages in list(chat_logs.items())[-5:]:  # Last 5 chats
-        logs_text += f"**Chat: {chat_key}**\n"
-        for msg in messages[-3:]:  # Last 3 messages per chat
-            timestamp = msg['timestamp'][:19]
-            from_user = msg['from_user']
-            content = msg['content'][:100] + "..." if len(msg['content']) > 100 else msg['content']
-            logs_text += f"[{timestamp}] {from_user}: {content}\n"
-        logs_text += "\n"
-    
-    if len(logs_text) > 4000:
-        logs_text = logs_text[:4000] + "...\n\n📝 Showing recent logs only."
-    
-    await update.message.reply_text(logs_text, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text("❌ Invalid user ID.")
