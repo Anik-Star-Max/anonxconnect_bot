@@ -29,10 +29,16 @@ def load_json(filename):
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
+def load_users():
+    return load_json(USERS_DB)
+
 def save_json(filename, data):
     """Save data to JSON file."""
     with open(filename, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+def save_users(users_data):
+    save_json(USERS_DB, users_data)
 
 def get_user(user_id):
     """Get user data from database."""
