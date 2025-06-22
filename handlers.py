@@ -18,7 +18,7 @@ from database import (
 from translation import get_translation_info, get_available_languages
 
 from photo_roulette import (
-    add_photo, get_random_photo, vote_photo, get_photo_stats, get_user_photos
+    add_photo, get_random_photo, rate_photo, get_user_photo_stats, get_user_photos
 )
 
 from config import ADMIN_ID, VIP_PACKAGES, DAILY_BONUS, COMPLAINTS_DB, CHAT_LOGS_DB
@@ -885,7 +885,7 @@ async def show_photo_roulette(query, context):
         parse_mode='HTML'
     )
 
-async def upload_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def add_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle photo upload."""
     user_id = update.effective_user.id
     user = get_user(user_id)
@@ -895,7 +895,7 @@ async def upload_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text("📤 Please send the photo you want to upload.")
 
-async def handle_uploaded_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_added_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle the uploaded photo."""
     user_id = update.effective_user.id
     user = get_user(user_id)
@@ -906,13 +906,13 @@ async def handle_uploaded_photo(update: Update, context: ContextTypes.DEFAULT_TY
     if update.message.photo:
         photo_id = update.message.photo[-1].file_id
         # Save the photo to the database or process it as needed
-        await update.message.reply_text("✅ Your photo has been uploaded successfully!")
+        await update.message.reply_text("✅ Your photo has been added successfully!")
         # Optionally, you can add logic to store the photo ID in the database
         # Example: add_photo(user_id, photo_id)
     else:
         await update.message.reply_text("❌ Please send a valid photo.")
 
-async def view_random_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def get_random_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show a random photo from the roulette."""
     user_id = update.effective_user.id
     user = get_user(user_id)
@@ -927,7 +927,7 @@ async def view_random_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ No photos available at the moment.")
 
-async def vote_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def rate_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle voting on a photo."""
     user_id = update.effective_user.id
     user = get_user(user_id)
@@ -939,7 +939,7 @@ async def vote_photo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # This could involve checking the photo ID and updating the vote count in the database
     await update.message.reply_text("🗳️ Please vote for the photo by sending its ID.")
 
-async def get_photo_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def get_user_photo_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show statistics for a specific photo."""
     user_id = update.effective_user.id
     user = get_user(user_id)
