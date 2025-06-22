@@ -9,6 +9,8 @@ from handlers import (
 from database import init_database
 from config import BOT_TOKEN
 
+print("✅ Render Loaded ADMIN_ID:", os.getenv("ADMIN_ID"))  
+
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
