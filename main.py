@@ -1,16 +1,22 @@
 import os
 import logging
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler
+
+# Import handlers
 from handlers import (
     start, stop, next_chat, menu, bonus, profile, rules, handle_message,
     handle_callback, report_user, ban_user, unban_user, stats, broadcast,
     give_vip, give_diamonds, view_complaints, view_user_chats
 )
+
+# Import database init & token
 from database import init_database
 from config import BOT_TOKEN
 
-print("✅ Render Loaded ADMIN_ID:", os.getenv("ADMIN_ID"))  
-
+# Log render environment for debug
+print("✅ Render Loaded ADMIN_ID:", os.getenv("ADMIN_ID"))
+print("✅ Render Loaded BOT_USERNAME:", os.getenv("BOT_USERNAME"))
+  
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
