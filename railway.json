@@ -1,11 +1,20 @@
 {
-  "env": {
-    "TELEGRAM_BOT_TOKEN": "8117045817:AAEIWRAV3iDt97-Cu0lMoEAvte1n4i4wNUw"
-  },
+  "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS"
+    "builder": "nixpacks"
   },
   "deploy": {
-    "startCommand": "python main.py"
+    "startCommand": "python main.py",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  },
+  "environments": {
+    "production": {
+      "variables": {
+        "BOT_TOKEN": "${{BOT_TOKEN}}",
+        "ADMIN_ID": "${{ADMIN_ID}}",
+        "BOT_USERNAME": "${{BOT_USERNAME}}"
+      }
+    }
   }
 }
