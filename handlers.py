@@ -1,19 +1,26 @@
 import logging
 from datetime import datetime, timedelta
+
+# Telegram imports
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode  # ✅ Fixed
 from telegram.ext import ContextTypes
+
+# Database & Logic imports
 from database import (
     get_user, create_user, update_user, is_user_vip, add_diamonds, spend_diamonds,
     give_vip, find_available_partner, connect_users, disconnect_users,
     add_complaint, log_chat_message, get_user_stats, get_top_referrals,
-    ban_user as db_ban_user, unban_user as db_unban_user, load_json
+    ban_user as db_ban_user, unban_user as db_unban_user,
+    load_json, save_json, load_users, save_users  # ✅ Add these
 )
+
 from translation import get_translation_info, get_available_languages
+
 from photo_roulette import (
-    upload_photo, get_random_photo, vote_photo, get_photo_stats,
-    get_user_photos
+    upload_photo, get_random_photo, vote_photo, get_photo_stats, get_user_photos
 )
+
 from config import ADMIN_ID, VIP_PACKAGES, DAILY_BONUS, COMPLAINTS_DB, CHAT_LOGS_DB
 
 logger = logging.getLogger(__name__)
