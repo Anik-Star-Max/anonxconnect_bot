@@ -1,7 +1,7 @@
 import logging
 from telegram.ext import Application, Defaults
 from config import BOT_TOKEN
-import handlers
+from handlers import register_handlers
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -13,8 +13,7 @@ def main():
         Defaults(parse_mode="HTML")
     ).build()
 
-    handlers.register_handlers(application)
-
+    register_handlers(application)
     application.run_polling()
 
 if __name__ == "__main__":
