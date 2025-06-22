@@ -1,10 +1,9 @@
 from deep_translator import GoogleTranslator
 
-async def translate_message(text, from_lang, to_lang):
-    if from_lang == to_lang:
+def translate_message(text, source, target):
+    if source == target:
         return text
     try:
-        translated = GoogleTranslator(source=from_lang, target=to_lang).translate(text)
-        return translated
+        return GoogleTranslator(source=source, target=target).translate(text)
     except Exception:
         return text
