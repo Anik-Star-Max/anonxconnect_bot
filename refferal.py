@@ -1,5 +1,4 @@
 import json
-from datetime import datetime
 from database import load_users, save_users, get_user, update_user
 
 class ReferralSystem:
@@ -7,7 +6,7 @@ class ReferralSystem:
         self.referral_file = "referrals.json"
         self.load_referrals()
     
-    def load_referrals(self):
+    def load_referrals(self) -> None:
         """Load referral data from JSON file"""
         try:
             with open(self.referral_file, 'r', encoding='utf-8') as f:
@@ -20,23 +19,23 @@ class ReferralSystem:
             }
             self.save_referrals()
     
-    def save_referrals(self):
+    def save_referrals(self) -> None:
         """Save referral data to JSON file"""
         with open(self.referral_file, 'w', encoding='utf-8') as f:
             json.dump(self.referral_data, f, indent=2, ensure_ascii=False)
     
-    def generate_referral_link(self, user_id, bot_username):
+    def generate_referral_link(self, user_id: int, bot_username: str) -> str:
         """Generate referral link for user"""
         return f"https://t.me/{bot_username}?start=ref_{user_id}"
     
-    def process_referral(self, new_user_id, referrer_id):
+    def process_referral(self, new_user_id: int, referrer_id: int) -> tuple:
         """Process a new referral"""
         new_user_str = str(new_user_id)
         referrer_str = str(referrer_id)
         
         # Check if user was already referred
         if new_user_str in self.referral_data["referred_by"]:
-            return False, "User already referred by someone else"
+            return False, "User  already referred by someone else"
         
         # Check if trying to refer themselves
         if new_user_str == referrer_str:
@@ -63,7 +62,7 @@ class ReferralSystem:
         self.save_referrals()
         return True, f"Referral successful! Referrer earned {reward_amount} diamonds, new user earned {new_user_reward} diamonds"
     
-    def add_referral_reward(self, user_id, amount):
+    def add_referral_reward(self, user_id: int, amount: int) -> None:
         """Add reward to user for successful referral"""
         user_str = str(user_id)
         
@@ -81,7 +80,7 @@ class ReferralSystem:
         
         self.save_referrals()
     
-    def get_user_referral_stats(self, user_id):
+    def get_user_referral_stats(self, user_id: int) -> dict:
         """Get user's referral statistics"""
         user_str = str(user_id)
         
@@ -96,7 +95,7 @@ class ReferralSystem:
             "referral_list": self.referral_data["referrals"].get(user_str, [])
         }
     
-    def get_top_referrers(self, limit=10):
+    def get_top_referrers(self, limit: int = 10) -> list:
         """Get top referrers by count"""
         referrer_stats = []
         users = load_users()
@@ -124,7 +123,7 @@ class ReferralSystem:
         
         return referrer_stats[:limit]
     
-    def toggle_referral_visibility(self, user_id, show_in_top=True):
+    def toggle_referral_visibility(self, user_id: int, show_in_top: bool = True) -> bool:
         """Toggle user's visibility in referral top"""
         users = load_users()
         user_str = str(user_id)
@@ -136,7 +135,7 @@ class ReferralSystem:
         
         return False
     
-    def get_referral_code_from_start(self, start_param):
+    def get_referral_code_from_start(self, start_param: str) -> int:
         """Extract referrer ID from start parameter"""
         if start_param and start_param.startswith("ref_"):
             try:
