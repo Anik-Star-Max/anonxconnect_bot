@@ -1,223 +1,169 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, CommandHandler, MessageHandler, CallbackQueryHandler, filters
-import database
-import admin
-import translation
-import referral
-import photo_roulette
+import os
+import datetime
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import ContextTypes, CommandHandler
+from database import (
+    get_user_data, save_user_data, create_user, user_exists,
+    get_top_referrals, get_vip_status, set_vip_status, get_complaints,
+    set_language, set_photo, set_profile, get_rules, is_admin,
+    ban_user, unban_user, broadcast_message, assign_diamonds, get_chat_stats,
+    get_all_users, add_referral
+)
+from translation import translate_message
 
-MENU_COMMANDS = [
-    ("Referral TOP", "referral_top"),
-    ("Profile", "profile"),
-    ("Rules", "rules"),
-    ("Photo Roulette", "photo_roulette"),
-    ("Premium", "premium"),
-    ("Get Vip status", "get_vip"),
-    ("Translate status", "translate_status"),
-    ("⚙️ Settings", "settings"),
-]
+ADMIN_ID = os.getenv("ADMIN_ID")
 
-def get_menu_keyboard(user_data):
-    buttons = [[InlineKeyboardButton(text, callback_data=data)] for text, data in MENU_COMMANDS]
-    return InlineKeyboardMarkup(buttons)
+# --- User Handlers ---
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    await database.add_user(user)
+    if not user_exists(user.id):
+        user_data = {
+            "user_id": user.id,
+            "username": user.username,
+            "gender": None,
+            "age": None,
+            "vip": False,
+            "vip_expiry": None,
+            "diamonds": 0,
+            "language": "en",
+            "current_partner": None,
+            "ban": False,
+            "is_admin": str(user.id) == str(ADMIN_ID),
+            "allow_referral_top": True,
+            "photo_url": None,
+            "profile": {},
+            "settings": {"translate": False}
+        }
+        create_user(user_data)
     await update.message.reply_text(
-        f"🆕 Welcome to Anonymous Chat, {user.first_name}! 🌐\n"
-        f"Meet strangers, chat anonymously, and enjoy! Use /menu for all features.",
-        reply_markup=get_menu_keyboard(database.get_user_data(user.id))
+        "🆕 Welcome to Anonymous Chat Bot!\n"
+        "Type /menu to see options.\n"
+        "Your chats are fully anonymous. Enjoy chatting! 🤗"
     )
 
-async def next_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    msg = await database.start_next_chat(user_id)
-    await update.message.reply_text(msg)
+async def stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Disconnect logic
+    pass
 
-async def stop_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    msg = await database.stop_current_chat(user_id)
-    await update.message.reply_text(msg)
-    # Notify partner if needed
-    partner_id = database.get_partner_id(user_id)
-    if partner_id:
-        await context.bot.send_message(partner_id, "🚫 Your partner has left the chat.")
+async def next_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Matchmaking logic
+    pass
 
 async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
+    menu_keyboard = [
+        ["Referral TOP", "Profile"],
+        ["Rules", "Photo Roulette"],
+        ["Premium", "Get Vip status"],
+        ["Translate status", "Settings"]
+    ]
     await update.message.reply_text(
-        "🔑 Main Menu / Settings\nChoose an option below:",
-        reply_markup=get_menu_keyboard(database.get_user_data(user.id))
+        "🔑 Menu / Settings:\nChoose an option below.",
+        reply_markup=ReplyKeyboardMarkup(menu_keyboard, resize_keyboard=True)
     )
 
 async def bonus(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    msg = await database.daily_bonus(user_id)
-    await update.message.reply_text(msg)
+    # Daily bonus logic
+    pass
 
 async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    profile_txt = await database.get_profile(user_id)
-    await update.message.reply_text(profile_txt, parse_mode="HTML")
+    # Profile view/edit logic
+    pass
 
 async def rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    with open("rules.txt", "r", encoding="utf-8") as f:
-        rules_text = f.read()
-    await update.message.reply_text(f"💡 Terms of Use:\n\n{rules_text}")
+    await update.message.reply_text(get_rules())
 
 async def referral_top(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    top = await referral.get_top()
-    await update.message.reply_text(top, parse_mode="HTML")
+    # Show top referrals logic
+    pass
+
+async def photo_roulette(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Photo Roulette logic
+    pass
 
 async def premium(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (
-        "💎 <b>Premium Features</b> 💎\n"
-        "- Gender & Age Match\n"
-        "- Profile Preview\n"
-        "- Photo Roulette\n"
-        "- Priority in Matchmaking\n"
-        "- Translation Power\n"
-        "- VIP Badge\n"
-        "- And much more!\n"
-        "Get VIP from /get_vip"
+    await update.message.reply_text(
+        "💎 Premium features:\n"
+        "- Gender/age match\n"
+        "- Profile preview\n"
+        "- More diamonds\n"
+        "- Photo Roulette likes\n"
+        "- Translation power\n"
+        "Use /get_vip_status to get VIP!"
     )
-    await update.message.reply_text(text, parse_mode="HTML")
 
-async def get_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = (
-        "🌟 <b>Get VIP Status</b> 🌟\n"
-        "1 Day: 500 💎\n"
-        "2 Days: 1000 💎\n"
-        "3 Days: 1500 💎\n"
-        "5 Days: 2000 💎\n"
-        "Earn diamonds via referrals, giveaways, or buy directly.\n"
-        "Use /bonus for daily diamonds!\n"
-        "Contact admin to buy more."
-    )
-    await update.message.reply_text(text, parse_mode="HTML")
+async def get_vip_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Show/purchase VIP logic
+    pass
 
 async def translate_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    is_vip = await database.is_vip(user_id)
-    if not is_vip:
-        await update.message.reply_text("🔒 Only VIP users can use translation power!")
-        return
-    status = await database.get_translate_status(user_id)
-    on_off = "ON" if status else "OFF"
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("On", callback_data="set_translate_on"),
-         InlineKeyboardButton("Off", callback_data="set_translate_off")],
-    ])
-    await update.message.reply_text(
-        f"🈳 Translation Power: <b>{on_off}</b>\n"
-        "If ON, all messages from other languages will be translated to your chosen language.",
-        reply_markup=keyboard,
-        parse_mode="HTML"
-    )
+    # Enable/disable translation
+    pass
 
 async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    settings_text = await database.get_settings_text(user_id)
-    await update.message.reply_text(
-        settings_text,
-        reply_markup=get_menu_keyboard(database.get_user_data(user_id)),
-        parse_mode="HTML"
-    )
+    # Change profile/settings logic
+    pass
 
-async def photo_roulette_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    msg = await photo_roulette.menu(user_id)
-    await update.message.reply_text(msg)
+async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Reporting logic
+    pass
 
-async def inline_button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    user_id = query.from_user.id
-    data = query.data
+async def text_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Forwarding logic with translation
+    pass
 
-    if data == "referral_top":
-        top = await referral.get_top()
-        await query.answer()
-        await query.edit_message_text(top, parse_mode="HTML")
-    elif data == "profile":
-        profile_txt = await database.get_profile(user_id)
-        await query.answer()
-        await query.edit_message_text(profile_txt, parse_mode="HTML")
-    elif data == "rules":
-        with open("rules.txt", "r", encoding="utf-8") as f:
-            rules_text = f.read()
-        await query.answer()
-        await query.edit_message_text(f"💡 Terms of Use:\n\n{rules_text}")
-    elif data == "photo_roulette":
-        msg = await photo_roulette.menu(user_id)
-        await query.answer()
-        await query.edit_message_text(msg)
-    elif data == "premium":
-        await premium(query, context)
-    elif data == "get_vip":
-        await get_vip(query, context)
-    elif data == "translate_status":
-        await translate_status(query, context)
-    elif data == "settings":
-        settings_text = await database.get_settings_text(user_id)
-        await query.answer()
-        await query.edit_message_text(settings_text, parse_mode="HTML")
-    elif data == "set_translate_on":
-        await database.set_translate_status(user_id, True)
-        await query.answer("Translation ON")
-        await query.edit_message_text("🈳 Translation Power is now <b>ON</b>.", parse_mode="HTML")
-    elif data == "set_translate_off":
-        await database.set_translate_status(user_id, False)
-        await query.answer("Translation OFF")
-        await query.edit_message_text("🈳 Translation Power is now <b>OFF</b>.", parse_mode="HTML")
-    else:
-        await query.answer("Unknown option.", show_alert=True)
+async def sticker_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Forward stickers
+    pass
 
-async def relay_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if not database.is_in_chat(user_id):
-        return  # Ignore message if not chatting
+async def photo_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Forward photo logic
+    pass
 
-    partner_id = database.get_partner_id(user_id)
-    if not partner_id:
-        return
+# --- Admin Handlers ---
+def admin_commands(app):
+    async def ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not is_admin(update.effective_user.id):
+            await update.message.reply_text("You are not authorized.")
+            return
+        # Ban logic
+        pass
 
-    # Get translation preference
-    user_data = database.get_user_data(user_id)
-    partner_data = database.get_user_data(partner_id)
-    should_translate = partner_data.get("translate", False)
-    from_lang = user_data.get("language", "en")
-    to_lang = partner_data.get("language", "en")
+    async def unban(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not is_admin(update.effective_user.id):
+            await update.message.reply_text("You are not authorized.")
+            return
+        # Unban logic
+        pass
 
-    # Text messages
-    if update.message.text:
-        text = update.message.text
-        if should_translate and from_lang != to_lang:
-            text = await translation.translate_message(text, from_lang, to_lang)
-        await context.bot.send_message(chat_id=partner_id, text=text)
-    # Forward other message types
-    elif update.message.photo:
-        await context.bot.send_photo(chat_id=partner_id, photo=update.message.photo[-1].file_id, caption=update.message.caption or "")
-    elif update.message.sticker:
-        await context.bot.send_sticker(chat_id=partner_id, sticker=update.message.sticker.file_id)
-    elif update.message.voice:
-        await context.bot.send_voice(chat_id=partner_id, voice=update.message.voice.file_id)
-    elif update.message.document:
-        await context.bot.send_document(chat_id=partner_id, document=update.message.document.file_id, caption=update.message.caption or "")
+    async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not is_admin(update.effective_user.id):
+            await update.message.reply_text("You are not authorized.")
+            return
+        # Broadcast logic
+        pass
 
-def register_handlers(app):
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("next", next_chat))
-    app.add_handler(CommandHandler("stop", stop_chat))
-    app.add_handler(CommandHandler("menu", menu))
-    app.add_handler(CommandHandler("bonus", bonus))
-    app.add_handler(CommandHandler("profile", profile))
-    app.add_handler(CommandHandler("rules", rules))
-    app.add_handler(CommandHandler("premium", premium))
-    app.add_handler(CommandHandler("get_vip", get_vip))
-    app.add_handler(CommandHandler("settings", settings))
-    app.add_handler(CommandHandler("photo_roulette", photo_roulette_cmd))
-    app.add_handler(CommandHandler("referral_top", referral_top))
-    app.add_handler(CallbackQueryHandler(inline_button_handler))
-    app.add_handler(MessageHandler(filters.COMMAND, admin.admin_command_handler))
-    app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.STICKER | filters.VOICE | filters.DOCUMENT, relay_message))
+    async def assign_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not is_admin(update.effective_user.id):
+            await update.message.reply_text("You are not authorized.")
+            return
+        # Assign VIP logic
+        pass
+
+    async def stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not is_admin(update.effective_user.id):
+            await update.message.reply_text("You are not authorized.")
+            return
+        # Stats logic
+        pass
+
+    app.add_handler(CommandHandler("ban", ban))
+    app.add_handler(CommandHandler("unban", unban))
+    app.add_handler(CommandHandler("broadcast", broadcast))
+    app.add_handler(CommandHandler("assign_vip", assign_vip))
+    app.add_handler(CommandHandler("stats", stats))
+
+async def error_handler(update, context):
+    print(f"Error: {context.error}")
+    if update and update.effective_message:
+        await update.effective_message.reply_text("An error occurred. Please try again later.")
