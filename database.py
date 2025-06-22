@@ -1,271 +1,176 @@
 import json
 import os
 from datetime import datetime, timedelta
-from config import (
-    USERS_DB, COMPLAINTS_DB, RAILWAY_DB, PHOTO_ROULETTE_DB, 
-    CHAT_LOGS_DB, ADMIN_ID, DEFAULT_LANGUAGE, DEFAULT_GENDER, DEFAULT_AGE_RANGE
-)
+from config import ADMIN_ID
 
-def init_database():
-    """Initialize all database files."""
-    databases = [
-        USERS_DB,
-        COMPLAINTS_DB,
-        RAILWAY_DB,
-        PHOTO_ROULETTE_DB,
-        CHAT_LOGS_DB
-    ]
-                
-    for db in databases:
-        if not os.path.exists(db):
-            with open(db, 'w', encoding='utf-8') as f:
-                json.dump({}, f)
+USERS_FILE = "users.json"
+QUEUE_FILE = "queue.json"
 
-def load_json(filename: str) -> dict:
-    """Load data from a JSON file."""
-    try:
-        with open(filename, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+def _load_users():
+    if not os.path.exists(USERS_FILE):
+        with open(USERS_FILE, "w") as f:
+            json.dump({}, f)
+    with open(USERS_FILE, "r") as f:
+        return json.load(f)
 
-def save_json(filename: str, data: dict) -> None:
-    """Save data to a JSON file."""
-    try:
-        with open(filename, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-    except IOError as e:
-        print(f"Error saving to {filename}: {e}")
+def _save_users(users):
+    with open(USERS_FILE, "w") as f:
+        json.dump(users, f, indent=2)
 
-def load_users() -> dict:
-    """Load user data from the database."""
-    return load_json(USERS_DB)
+def get_user_data(user_id):
+    users = _load_users()
+    return users.get(str(user_id), {})
 
-def save_users(users_data: dict) -> None:
-    """Save user data to the database."""
-    save_json(USERS_DB, users_data)
+async def add_user(user):
+    users = _load_users()
+    uid = str(user.id)
+    if uid not in users:
+        users[uid] = {
+            "id": user.id,
+            "name": user.full_name,
+            "gender": None,
+            "age": None,
+            "vip_until": None,
+            "diamonds": 0,
+            "language": "en",
+            "partner": None,
+            "banned": False,
+            "referrals": [],
+            "translate": False,
+            "photo": None,
+            "allow_account": False,
+            "admin": (user.id == ADMIN_ID),
+            "joined": datetime.now().isoformat(),
+        }
+        _save_users(users)
 
-def get_user(user_id: int) -> dict:
-    """Get user data from the database."""
-    users = load_users()
-    return users.get(str(user_id))
+def _get_queue():
+    if not os.path.exists(QUEUE_FILE):
+        with open(QUEUE_FILE, "w") as f:
+            json.dump([], f)
+    with open(QUEUE_FILE, "r") as f:
+        return json.load(f)
 
-def save_user(user_id: int, user_data: dict) -> None:
-    """Save user data to the database."""
-    users = load_users()
-    users[str(user_id)] = user_data
-    save_users(users)
+def _save_queue(queue):
+    with open(QUEUE_FILE, "w") as f:
+        json.dump(queue, f)
 
-def create_user(user_id: int, username: str, first_name: str) -> dict:
-    """Create a new user in the database."""
-    user_data = {
-        'user_id': user_id,
-        'username': username,
-        'first_name': first_name,
-        'gender': DEFAULT_GENDER,
-        'age': None,
-        'language': DEFAULT_LANGUAGE,
-        'diamonds': 100,  # Starting diamonds
-        'vip_until': None,
-        'is_vip': user_id == ADMIN_ID,  # Admin has lifetime VIP
-        'banned': False,
-        'current_partner': None,
-        'waiting_for_partner': False,
-        'last_bonus': None,
-        'referrals': [],
-        'referred_by': None,
-        'translation_enabled': False,
-        'profile_photo': None,
-        'photo_likes': 0,
-        'photo_dislikes': 0,
-        'preferred_gender': 'any',
-        'preferred_age_min': 18,
-        'preferred_age_max': 99,
-        'created_at': datetime.now().isoformat(),
-        'last_active': datetime.now().isoformat()
-    }
-    save_user(user_id, user_data)
-    return user_data
+async def start_next_chat(user_id):
+    user_id = str(user_id)
+    users = _load_users()
+    queue = _get_queue()
 
-def update_user(user_id: int, **kwargs) -> dict:
-    """Update user data."""
-    user = get_user(user_id)
-    if user:
-        user.update(kwargs)
-        user['last_active'] = datetime.now().isoformat()
-        save_user(user_id, user)
-        return user
-    return None
+    # Check banned
+    if users.get(user_id, {}).get("banned"):
+        return "🚫 You are banned from using the chat."
 
-def is_user_vip(user_id: int) -> bool:
-    """Check if user has VIP status."""
-    if user_id == ADMIN_ID:
-        return True
-    
-    user = get_user(user_id)
-    if not user or not user.get('vip_until'):
+    # Already chatting?
+    if users.get(user_id, {}).get("partner"):
+        return "❗ You are already connected to a partner. Use /stop to disconnect first."
+
+    # Remove from queue if already there
+    if user_id in queue:
+        queue.remove(user_id)
+
+    # Try to find a match
+    for other_id in queue:
+        if other_id == user_id:
+            continue
+        if users.get(other_id, {}).get("partner") is not None:
+            continue
+        users[user_id]["partner"] = int(other_id)
+        users[other_id]["partner"] = int(user_id)
+        _save_users(users)
+        queue.remove(other_id)
+        _save_queue(queue)
+        return "🎯 Partner found! Say hi 👋"
+    # No partner found, add to queue
+    queue.append(user_id)
+    _save_queue(queue)
+    return "⏳ Waiting for a partner... Please wait."
+
+async def stop_current_chat(user_id):
+    user_id = str(user_id)
+    users = _load_users()
+    queue = _get_queue()
+    if user_id in queue:
+        queue.remove(user_id)
+        _save_queue(queue)
+        return "🚫 You left the search queue."
+    partner_id = users.get(user_id, {}).get("partner")
+    if partner_id:
+        partner_id = str(partner_id)
+        users[user_id]["partner"] = None
+        if partner_id in users:
+            users[partner_id]["partner"] = None
+        _save_users(users)
+        return "🚫 You disconnected. Your partner has been notified."
+    return "❗ You are not chatting or searching."
+
+def get_partner_id(user_id):
+    users = _load_users()
+    return users.get(str(user_id), {}).get("partner")
+
+def is_in_chat(user_id):
+    users = _load_users()
+    return users.get(str(user_id), {}).get("partner") is not None
+
+async def daily_bonus(user_id):
+    users = _load_users()
+    u = users.get(str(user_id))
+    if not u:
+        return "Please /start first."
+    if "last_bonus" in u and u["last_bonus"] == datetime.now().date().isoformat():
+        return "⚕️ You already claimed your daily bonus today."
+    u["diamonds"] += 25
+    u["last_bonus"] = datetime.now().date().isoformat()
+    _save_users(users)
+    return "⚕️ You received 25 daily diamonds! 💎"
+
+async def get_profile(user_id):
+    u = get_user_data(user_id)
+    if not u:
+        return "No profile found. Please /start first."
+    text = f"""👤 <b>Your Profile</b>
+<b>Name:</b> {u.get('name')}
+<b>Gender:</b> {u.get('gender','Not set')}
+<b>Age:</b> {u.get('age','Not set')}
+<b>Language:</b> {u.get('language','en')}
+<b>Diamonds:</b> {u.get('diamonds',0) if u.get('admin') else 'Hidden'}
+<b>VIP until:</b> {u.get('vip_until','None')}
+<b>Banned:</b> {u.get('banned',False)}
+"""
+    return text
+
+async def is_vip(user_id):
+    u = get_user_data(user_id)
+    if not u:
         return False
-    
-    vip_until = datetime.fromisoformat(user['vip_until'])
-    return datetime.now() < vip_until
-
-def add_diamonds(user_id: int, amount: int) -> int:
-    """Add diamonds to user."""
-    user = get_user(user_id)
-    if user:
-        user['diamonds'] = user.get('diamonds', 0) + amount
-        save_user(user_id, user)
-        return user['diamonds']
-    return 0
-
-def spend_diamonds(user_id: int, amount: int) -> bool:
-    """Spend diamonds from user."""
-    user = get_user(user_id)
-    if user and user.get('diamonds', 0) >= amount:
-        user['diamonds'] -= amount
-        save_user(user_id, user)
+    if u.get("admin"):
         return True
+    vip_until = u.get("vip_until")
+    if vip_until:
+        return datetime.fromisoformat(vip_until) > datetime.now()
     return False
 
-def give_vip(user_id: int, days: int) -> bool:
-    """Give VIP status to user."""
-    user = get_user(user_id)
-    if user:
-        if user.get('vip_until'):
-            vip_until = datetime.fromisoformat(user['vip_until'])
-            new_vip_until = vip_until + timedelta(days=days) if vip_until > datetime.now() else datetime.now() + timedelta(days=days)
-        else:
-            new_vip_until = datetime.now() + timedelta(days=days)
-        
-        user['vip_until'] = new_vip_until.isoformat()
-        user['is_vip'] = True
-        save_user(user_id, user)
-        return True
-    return False
+async def get_translate_status(user_id):
+    u = get_user_data(user_id)
+    return u.get("translate", False)
 
-def find_available_partner(user_id: int) -> str:
-    """Find an available partner for the user."""
-    users = load_users()
-    user = users.get(str(user_id))
-    
-    if not user:
-        return None
-    
-    available_users = []
-    for uid, u in users.items():
-        if (uid != str(user_id) and 
-            u.get('waiting_for_partner') and 
-            not u.get('banned') and 
-            not u.get('current_partner')):
-            
-            # Check if user is VIP and has preferences
-            if is_user_vip(user_id):
-                # Check gender preference
-                if user.get('preferred_gender', 'any') != 'any' and u.get('gender') != user['preferred_gender']:
-                    continue
-                
-                # Check age preference
-                if u.get('age'):
-                    min_age = user.get('preferred_age_min', 18)
-                    max_age = user.get('preferred_age_max', 99)
-                    if not (min_age <= u['age'] <= max_age):
-                        continue
-            
-            available_users.append(uid)
-    
-    return available_users[0] if available_users else None
+async def set_translate_status(user_id, status: bool):
+    users = _load_users()
+    uid = str(user_id)
+    if uid in users:
+        users[uid]["translate"] = status
+        _save_users(users)
 
-def connect_users(user1_id: int, user2_id: int) -> None:
-    """Connect two users for chat."""
-    update_user(user1_id, current_partner=user2_id, waiting_for_partner=False)
-    update_user(user2_id, current_partner=user1_id, waiting_for_partner=False)
-
-def disconnect_users(user1_id: int, user2_id: int = None) -> str:
-    """Disconnect users from chat."""
-    user1 = get_user(user1_id)
-    if user1 and user1.get('current_partner'):
-        partner_id = user1['current_partner']
-        update_user(user1_id, current_partner=None, waiting_for_partner=False)
-        update_user(partner_id, current_partner=None, waiting_for_partner=False)
-        return partner_id
-    return None
-
-def add_complaint(user_id: int, partner_id: int, reason: str) -> str:
-    """Add a complaint to the database."""
-    complaints = load_json(COMPLAINTS_DB)
-    complaint_id = str(len(complaints) + 1)
-    
-    complaint_data = {
-        'id': complaint_id,
-        'reporter_id': user_id,
-        'reported_id': partner_id,
-        'reason': reason,
-        'timestamp': datetime.now().isoformat(),
-        'status': 'pending'
-    }
-    
-    complaints[complaint_id] = complaint_data
-    save_json(COMPLAINTS_DB, complaints)
-    return complaint_id
-
-def log_chat_message(sender_id: int, receiver_id: int, message_type: str, content: str) -> None:
-    """Log chat messages for admin monitoring."""
-    logs = load_json(CHAT_LOGS_DB)
-    log_id = str(len(logs) + 1)
-    
-    log_data = {
-        'id': log_id,
-        'sender_id': sender_id,
-        'receiver_id': receiver_id,
-        'message_type': message_type,
-        'content': content[:100] if message_type == 'text' else f'[{message_type}]',
-        'timestamp': datetime.now().isoformat()
-    }
-    
-    logs[log_id] = log_data
-    save_json(CHAT_LOGS_DB, logs)
-
-def get_user_stats() -> dict:
-    """Get bot statistics."""
-    users = load_users()
-    complaints = load_json(COMPLAINTS_DB)
-    
-    total_users = len(users)
-    active_users = len([u for u in users.values() if u.get('current_partner')])
-    vip_users = len([u for u in users.values() if is_user_vip(u['user_id'])])
-    banned_users = len([u for u in users.values() if u.get('banned')])
-    total_complaints = len(complaints)
-    
-    return {
-        'total_users': total_users,
-        'active_users': active_users,
-        'vip_users': vip_users,
-        'banned_users': banned_users,
-        'total_complaints': total_complaints
-    }
-
-def get_top_referrals(limit: int = 10) -> list:
-    """Get top users by referral count."""
-    users = load_users()
-    referral_counts = []
-    
-    for user_id, user_data in users.items():
-        referral_count = len(user_data.get('referrals', []))
-        if referral_count > 0:
-            referral_counts.append({
-                'user_id': user_id,
-                'username': user_data.get('username', 'Unknown'),
-                'first_name': user_data.get('first_name', 'Unknown'),
-                'referral_count': referral_count
-            })
-    
-    referral_counts.sort(key=lambda x: x['referral_count'], reverse=True)
-    return referral_counts[:limit]
-
-def ban_user(user_id: int) -> bool:
-    """Ban a user."""
-    return update_user(user_id, banned=True, current_partner=None, waiting_for_partner=False)
-
-def unban_user(user_id: int) -> bool:
-    """Unban a user."""
-    return update_user(user_id, banned=False)
+async def get_settings_text(user_id):
+    u = get_user_data(user_id)
+    text = f"""⚙️ <b>Settings</b>
+Name: {u.get('name','')}
+Gender: {u.get('gender','')}
+Age: {u.get('age','')}
+Language: {u.get('language','')}
+Profile Photo: {"Set" if u.get('photo') else "Not set"}
+"""
+    return text
