@@ -14,9 +14,15 @@ from database import init_database
 from config import BOT_TOKEN
 
 # Log render environment for debug
-print("✅ Render Loaded ADMIN_ID:", os.getenv("ADMIN_ID"))
-print("✅ Render Loaded BOT_USERNAME:", os.getenv("BOT_USERNAME"))
-  
+admin_id = os.getenv("ADMIN_ID")
+bot_username = os.getenv("BOT_USERNAME")
+
+if admin_id is None or bot_username is None:
+    logging.warning("ADMIN_ID or BOT_USERNAME is not set in the environment variables.")
+
+print("✅ Render Loaded ADMIN_ID:", admin_id)
+print("✅ Render Loaded BOT_USERNAME:", bot_username)
+
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -56,11 +62,14 @@ def main():
     application.add_handler(CallbackQueryHandler(handle_callback))
     
     # Add message handler for all non-command messages
-    application.add_handler(MessageHandler(filters.ALL & ~filters.COMMAND, handle_message))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     # Run the bot until the user presses Ctrl-C
     logger.info("Bot started successfully!")
-    application.run_polling(allowed_updates=["message", "callback_query"])
+    try:
+        application.run_polling(allowed_updates=["message", "callback_query"])
+    except Exception as e:
+        logger.error(f"An error occurred: {e}")
 
 if __name__ == '__main__':
     main()
