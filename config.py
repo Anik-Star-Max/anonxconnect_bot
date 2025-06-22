@@ -2,7 +2,13 @@ import os
 
 # Bot Configuration
 BOT_TOKEN = os.getenv('BOT_TOKEN')
-ADMIN_ID = int(os.getenv('ADMIN_ID'))
+
+# ✅ Render cache fix — using clean REAL_ADMIN_ID env var
+REAL_ADMIN_ID = int(os.getenv('REAL_ADMIN_ID'))  # 👈 Use this variable in Render
+
+# ✅ Bridge it back to original name so no other file needs to change
+ADMIN_ID = REAL_ADMIN_ID
+
 BOT_USERNAME = os.getenv('BOT_USERNAME')
 
 # VIP Packages (in diamonds)
