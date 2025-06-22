@@ -4,21 +4,27 @@ from datetime import datetime
 from database import load_users, save_users
 
 class PhotoRoulette:
-    def __init__(self):
-        self.photos_file = "photo_roulette.json"
-        self.load_photos()
-    
-    def load_photos(self):
-        """Load photo roulette data from JSON file"""
-        try:
-            with open(self.photos_file, 'r', encoding='utf-8') as f:
-                self.photos_data = json.load(f)
-        except FileNotFoundError:
-            self.photos_data = {
-                "photos": {},
-                "likes": {},
-                "views": {}
-            }
+    def __init__(self):
+        self.photos_file = "photo_roulette.json"
+        self.photos_data = {
+            "photos": {},
+            "likes": {},
+            "views": {}
+        }
+        self.load_photos()
+
+    def load_photos(self):
+        """Load photo roulette data from JSON file"""
+        try:
+            with open(self.photos_file, 'r', encoding='utf-8') as f:
+                self.photos_data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            self.photos_data = {
+                "photos": {},
+                "likes": {},
+                "views": {}
+            }
+
             self.save_photos()
     
     def save_photos(self):
