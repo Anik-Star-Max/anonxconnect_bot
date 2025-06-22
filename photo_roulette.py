@@ -24,8 +24,7 @@ class PhotoRoulette:
                 "likes": {},
                 "views": {}
             }
-
-        self.save_photos()  # Ensure we save the initialized structure
+            self.save_photos()  # Ensure we save the initialized structure
 
     def save_photos(self) -> None:
         """Save photo roulette data to JSON file"""
