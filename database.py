@@ -1,165 +1,284 @@
 import json
-import time
 import os
-from config import ADMIN_ID
+from datetime import datetime, timedelta
+from config import *
 
-USERS_FILE = "users.json"
-COMPLAINTS_FILE = "complaints.json"
-REFERRALS_FILE = "referrals.json"
-
-# --- User data helpers ---
+def init_database():
+    """Initialize all database files."""
+    # Initialize users.json
+    if not os.path.exists(USERS_DB):
+        with open(USERS_DB, 'w') as f:
+            json.dump({}, f)
+    
+    # Initialize complaints.json
+    if not os.path.exists(COMPLAINTS_DB):
+        with open(COMPLAINTS_DB, 'w') as f:
+            json.dump({}, f)
+    
+    # Initialize chat_logs.json
+    if not os.path.exists(CHAT_LOGS):
+        with open(CHAT_LOGS, 'w') as f:
+            json.dump({}, f)
+    
+    # Initialize railway.json
+    railway_config = {
+        "build": {
+            "builder": "heroku/python"
+        },
+        "deploy": {
+            "startCommand": "python main.py"
+        }
+    }
+    
+    if not os.path.exists(RAILWAY_CONFIG):
+        with open(RAILWAY_CONFIG, 'w') as f:
+            json.dump(railway_config, f, indent=2)
 
 def load_users():
-    with open(USERS_FILE, "r") as f:
-        return json.load(f)
+    """Load users from database."""
+    try:
+        with open(USERS_DB, 'r') as f:
+            return json.load(f)
+    except:
+        return {}
 
-def save_users(data):
-    with open(USERS_FILE, "w") as f:
-        json.dump(data, f, indent=2)
+def save_users(users_data):
+    """Save users to database."""
+    with open(USERS_DB, 'w') as f:
+        json.dump(users_data, f, indent=2)
+
+def load_complaints():
+    """Load complaints from database."""
+    try:
+        with open(COMPLAINTS_DB, 'r') as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_complaints(complaints_data):
+    """Save complaints to database."""
+    with open(COMPLAINTS_DB, 'w') as f:
+        json.dump(complaints_data, f, indent=2)
+
+def load_chat_logs():
+    """Load chat logs from database."""
+    try:
+        with open(CHAT_LOGS, 'r') as f:
+            return json.load(f)
+    except:
+        return {}
+
+def save_chat_logs(chat_data):
+    """Save chat logs to database."""
+    with open(CHAT_LOGS, 'w') as f:
+        json.dump(chat_data, f, indent=2)
 
 def get_user(user_id):
+    """Get user data by ID."""
     users = load_users()
-    return users.get(str(user_id), None)
+    return users.get(str(user_id))
 
-def create_user(user_id, name):
+def save_user(user_id, user_data):
+    """Save user data."""
     users = load_users()
-    if str(user_id) not in users:
-        users[str(user_id)] = {
-            "name": name,
-            "gender": "unset",
-            "age": 0,
-            "diamonds": 0,
-            "vip": {"status": False, "expires": 0},
-            "language": "en",
-            "translation": False,
-            "current_partner": None,
-            "ban": False,
-            "referrals": 0,
-            "photo_likes": 0
-        }
-        save_users(users)
-
-def update_user(user_id, new_data):
-    users = load_users()
-    users[str(user_id)].update(new_data)
+    users[str(user_id)] = user_data
     save_users(users)
 
-def get_partner(user_id):
+def create_user(user_id, username, first_name):
+    """Create new user with default values."""
+    user_data = {
+        'user_id': user_id,
+        'username': username,
+        'first_name': first_name,
+        'gender': None,
+        'age': None,
+        'language': 'en',
+        'diamonds': 100,  # Starting diamonds
+        'vip_until': None,
+        'banned': False,
+        'partner': None,
+        'waiting': False,
+        'referrals': [],
+        'referral_count': 0,
+        'last_bonus': None,
+        'profile_photos': [],
+        'photo_likes': 0,
+        'settings': {
+            'translation': False,
+            'show_profile': True,
+            'gender_filter': None,
+            'age_min': 18,
+            'age_max': 99
+        },
+        'registered': datetime.now().isoformat()
+    }
+    save_user(user_id, user_data)
+    return user_data
+
+def is_vip(user_id):
+    """Check if user has active VIP status."""
+    if user_id == ADMIN_ID:
+        return True
+    
     user = get_user(user_id)
-    if user:
-        return user.get("current_partner", None)
-    return None
-
-def leave_chat(user_id):
-    users = load_users()
-    user = users.get(str(user_id))
-    if not user or not user["current_partner"]:
+    if not user or not user.get('vip_until'):
         return False
-    # Notify partner
-    partner_id = user["current_partner"]
-    if partner_id and str(partner_id) in users:
-        users[str(partner_id)]["current_partner"] = None
-    user["current_partner"] = None
-    save_users(users)
+    
+    vip_until = datetime.fromisoformat(user['vip_until'])
+    return datetime.now() < vip_until
+
+def add_vip_days(user_id, days):
+    """Add VIP days to user."""
+    user = get_user(user_id)
+    if not user:
+        return False
+    
+    current_vip = user.get('vip_until')
+    if current_vip:
+        vip_until = datetime.fromisoformat(current_vip)
+        if vip_until > datetime.now():
+            new_vip = vip_until + timedelta(days=days)
+        else:
+            new_vip = datetime.now() + timedelta(days=days)
+    else:
+        new_vip = datetime.now() + timedelta(days=days)
+    
+    user['vip_until'] = new_vip.isoformat()
+    save_user(user_id, user)
     return True
 
-QUEUE = []
-
-def match_user(user_id):
-    users = load_users()
-    user = users.get(str(user_id))
-    if not user or user.get("ban"):
-        return False
-    if user_id in QUEUE:
-        return False
-    # Find another available user
-    for uid, data in users.items():
-        if int(uid) != user_id and data.get("current_partner") is None and not data.get("ban") and int(uid) not in QUEUE:
-            # Connect both
-            users[str(user_id)]["current_partner"] = int(uid)
-            users[uid]["current_partner"] = user_id
-            save_users(users)
-            return True
-    # If not found, add to queue
-    QUEUE.append(user_id)
-    return False
-
-def claim_bonus(user_id):
-    users = load_users()
-    user = users.get(str(user_id))
-    now = int(time.time())
-    last_bonus = user.get("last_bonus", 0)
-    if now - last_bonus > 24*60*60:
-        reward = 50 if not user["vip"]["status"] else 150
-        user["diamonds"] += reward
-        user["last_bonus"] = now
-        save_users(users)
-        return f"⚕️ Daily bonus received! +{reward}💎"
-    return "You already claimed your bonus today."
-
-def photo_roulette(user_id):
-    # For demo. Save photo in your app and allow like/see next
-    return "Not implemented yet."
-
-def get_referral_code(user_id):
-    return str(user_id)  # Just use user ID for simplicity
-
-def get_top_referrals():
-    users = load_users()
-    ranking = sorted([(u['name'], u.get('referrals',0)) for u in users.values()], key=lambda x: x[1], reverse=True)
-    return ranking[:5]
-
-def give_vip(user_id, days):
-    users = load_users()
-    user = users.get(str(user_id))
+def add_diamonds(user_id, amount):
+    """Add diamonds to user."""
+    user = get_user(user_id)
     if not user:
-        return "User not found."
-    now = int(time.time())
-    expire = now + days*24*60*60
-    user["vip"] = {"status": True, "expires": expire}
+        return False
+    
+    user['diamonds'] = user.get('diamonds', 0) + amount
+    save_user(user_id, user)
+    return True
+
+def deduct_diamonds(user_id, amount):
+    """Deduct diamonds from user."""
+    user = get_user(user_id)
+    if not user or user.get('diamonds', 0) < amount:
+        return False
+    
+    user['diamonds'] -= amount
+    save_user(user_id, user)
+    return True
+
+def find_partner(user_id):
+    """Find a suitable partner for the user."""
+    users = load_users()
+    user = users.get(str(user_id))
+    
+    if not user:
+        return None
+    
+    # Get user preferences
+    gender_filter = user.get('settings', {}).get('gender_filter')
+    age_min = user.get('settings', {}).get('age_min', 18)
+    age_max = user.get('settings', {}).get('age_max', 99)
+    
+    # Find waiting users
+    for uid, other_user in users.items():
+        if (uid != str(user_id) and 
+            other_user.get('waiting') and 
+            not other_user.get('banned') and
+            not other_user.get('partner')):
+            
+            # Check gender filter (only for VIP users)
+            if is_vip(user_id) and gender_filter:
+                if other_user.get('gender') != gender_filter:
+                    continue
+            
+            # Check age filter (only for VIP users)
+            if is_vip(user_id) and other_user.get('age'):
+                if not (age_min <= other_user['age'] <= age_max):
+                    continue
+            
+            return int(uid)
+    
+    return None
+
+def connect_users(user1_id, user2_id):
+    """Connect two users for chat."""
+    users = load_users()
+    
+    if str(user1_id) in users:
+        users[str(user1_id)]['partner'] = user2_id
+        users[str(user1_id)]['waiting'] = False
+    
+    if str(user2_id) in users:
+        users[str(user2_id)]['partner'] = user1_id
+        users[str(user2_id)]['waiting'] = False
+    
     save_users(users)
-    return f"VIP given for {days} days to {user['name']}"
 
-def ban_user(user_id):
+def disconnect_user(user_id):
+    """Disconnect user from current chat."""
     users = load_users()
-    if str(user_id) in users:
-        users[str(user_id)]["ban"] = True
-        save_users(users)
-        return True
-    return False
+    user = users.get(str(user_id))
+    
+    if not user:
+        return None
+    
+    partner_id = user.get('partner')
+    
+    # Clear current user's partner
+    users[str(user_id)]['partner'] = None
+    users[str(user_id)]['waiting'] = False
+    
+    # Clear partner's connection
+    if partner_id and str(partner_id) in users:
+        users[str(partner_id)]['partner'] = None
+        users[str(partner_id)]['waiting'] = False
+    
+    save_users(users)
+    return partner_id
 
-def unban_user(user_id):
-    users = load_users()
-    if str(user_id) in users:
-        users[str(user_id)]["ban"] = False
-        save_users(users)
-        return True
-    return False
-
-def broadcast(message):
-    users = load_users()
-    # Actually sending happens from handlers
-    pass
+def log_message(user_id, partner_id, message_type, content):
+    """Log chat messages for admin viewing."""
+    chat_logs = load_chat_logs()
+    
+    log_entry = {
+        'timestamp': datetime.now().isoformat(),
+        'from_user': user_id,
+        'to_user': partner_id,
+        'type': message_type,
+        'content': content[:500]  # Limit content length
+    }
+    
+    # Create log key for this chat pair
+    chat_key = f"{min(user_id, partner_id)}_{max(user_id, partner_id)}"
+    
+    if chat_key not in chat_logs:
+        chat_logs[chat_key] = []
+    
+    chat_logs[chat_key].append(log_entry)
+    
+    # Keep only last 100 messages per chat
+    chat_logs[chat_key] = chat_logs[chat_key][-100:]
+    
+    save_chat_logs(chat_logs)
 
 def get_stats():
+    """Get bot statistics."""
     users = load_users()
-    return f"Total users: {len(users)}"
-
-def is_translation_on(user_id):
-    user = get_user(user_id)
-    if user:
-        return user.get("translation", False)
-    return False
-
-# This is just a stub for reporting - expand as needed
-def add_complaint(user_id, text):
-    if not os.path.exists(COMPLAINTS_FILE):
-        with open(COMPLAINTS_FILE, "w") as f:
-            json.dump({}, f)
-    with open(COMPLAINTS_FILE, "r+") as f:
-        complaints = json.load(f)
-        nid = str(len(complaints)+1)
-        complaints[nid] = {"user_id": user_id, "text": text, "time": int(time.time())}
-        f.seek(0)
-        json.dump(complaints, f, indent=2)
-        f.truncate()
+    complaints = load_complaints()
+    
+    total_users = len(users)
+    active_chats = sum(1 for user in users.values() if user.get('partner'))
+    waiting_users = sum(1 for user in users.values() if user.get('waiting'))
+    vip_users = sum(1 for uid in users.keys() if is_vip(int(uid)))
+    banned_users = sum(1 for user in users.values() if user.get('banned'))
+    total_complaints = len(complaints)
+    
+    return {
+        'total_users': total_users,
+        'active_chats': active_chats // 2,  # Divide by 2 since each chat involves 2 users
+        'waiting_users': waiting_users,
+        'vip_users': vip_users,
+        'banned_users': banned_users,
+        'total_complaints': total_complaints
+    }
