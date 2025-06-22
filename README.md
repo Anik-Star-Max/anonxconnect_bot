@@ -1,22 +1,16 @@
-# Anonymous Chat Bot
+# Anonymous Telegram Chat Bot
 
-A fully anonymous Telegram chat bot with VIP features and auto-translation.
+- Anonymous chat: Connect with strangers, no usernames revealed.
+- VIP features: Gender/age match, profile preview, translation, photo roulette, premium, referral top, etc.
+- Admin controls: Ban/unban, assign VIP, broadcast, complaints view, give diamonds.
+- Fully modular, secure, ready for Railway/Replit deployment.
+- Environment variables: `BOT_TOKEN`, `ADMIN_ID`, `BOT_USERNAME`.
 
-## Railway Deployment
+## Features
 
-1. Create a new Railway project
-2. Connect to this GitHub repository
-3. Add environment variables:
-   - `BOT_TOKEN`: Your Telegram bot token from @BotFather
-   - `ADMIN_ID`: Your Telegram user ID (optional)
-4. Set start command to `python main.py`
-5. Deploy!
+- /start, /stop, /next, /menu, /bonus, /profile, /rules, /referral_top, /photo_roulette, /premium, /get_vip_status, /translate_status, /settings, /report
+- Diamond/VIP system
+- Referral and daily bonus
+- Admin can do everything
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new)
-
-## Local Development
-
-1. Clone repository:
-```bash
-git clone https://github.com/yourusername/AnonymousChatBot.git
-cd AnonymousChatBot
+Install requirements with:
