@@ -1,362 +1,252 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
 import json
+import os
 from datetime import datetime, timedelta
-from database import get_user_data, save_user_data, get_all_users, ban_user, unban_user
-from config import ADMIN_ID
+from database import load_users, save_users, load_complaints
 
-async def admin_panel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show admin control panel"""
-    user_id = update.effective_user.id
+class AdminPanel:
+    def __init__(self):
+        self.admin_id = int(os.getenv('ADMIN_ID', 0))
+        self.chat_logs_file = "chat_logs.json"
+        self.admin_logs_file = "admin_logs.json"
+        self.load_chat_logs()
+        self.load_admin_logs()
     
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("❌ Access denied! You are not authorized.")
-        return
+    def load_chat_logs(self):
+        """Load chat logs for admin monitoring"""
+        try:
+            with open(self.chat_logs_file, 'r', encoding='utf-8') as f:
+                self.chat_logs = json.load(f)
+        except FileNotFoundError:
+            self.chat_logs = {}
+            self.save_chat_logs()
     
-    keyboard = [
-        [InlineKeyboardButton("📊 Bot Statistics", callback_data="admin_stats")],
-        [InlineKeyboardButton("👥 User Management", callback_data="admin_users")],
-        [InlineKeyboardButton("💎 Give Diamonds", callback_data="admin_diamonds")],
-        [InlineKeyboardButton("👑 Give VIP", callback_data="admin_vip")],
-        [InlineKeyboardButton("🔨 Ban User", callback_data="admin_ban")],
-        [InlineKeyboardButton("🚪 Unban User", callback_data="admin_unban")],
-        [InlineKeyboardButton("📢 Broadcast", callback_data="admin_broadcast")],
-        [InlineKeyboardButton("🚨 View Complaints", callback_data="admin_complaints")],
-        [InlineKeyboardButton("💬 View User Chats", callback_data="admin_chats")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    def save_chat_logs(self):
+        """Save chat logs"""
+        with open(self.chat_logs_file, 'w', encoding='utf-8') as f:
+            json.dump(self.chat_logs, f, indent=2, ensure_ascii=False)
     
-    await update.message.reply_text(
-        "🔐 **Admin Control Panel**\n\n"
-        "Choose an option to manage the bot:",
-        reply_markup=reply_markup,
-        parse_mode='Markdown'
-    )
-
-async def show_bot_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show bot statistics"""
-    try:
-        users = get_all_users()
+    def load_admin_logs(self):
+        """Load admin action logs"""
+        try:
+            with open(self.admin_logs_file, 'r', encoding='utf-8') as f:
+                self.admin_logs = json.load(f)
+        except FileNotFoundError:
+            self.admin_logs = []
+            self.save_admin_logs()
+    
+    def save_admin_logs(self):
+        """Save admin action logs"""
+        with open(self.admin_logs_file, 'w', encoding='utf-8') as f:
+            json.dump(self.admin_logs, f, indent=2, ensure_ascii=False)
+    
+    def is_admin(self, user_id):
+        """Check if user is admin"""
+        return user_id == self.admin_id
+    
+    def log_chat_message(self, user_id, partner_id, message_text, message_type="text"):
+        """Log chat message for admin monitoring"""
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "user_id": user_id,
+            "partner_id": partner_id,
+            "message": message_text,
+            "type": message_type
+        }
+        
+        # Create chat session key
+        chat_key = f"{min(user_id, partner_id)}_{max(user_id, partner_id)}"
+        
+        if chat_key not in self.chat_logs:
+            self.chat_logs[chat_key] = []
+        
+        self.chat_logs[chat_key].append(log_entry)
+        
+        # Keep only last 100 messages per chat
+        if len(self.chat_logs[chat_key]) > 100:
+            self.chat_logs[chat_key] = self.chat_logs[chat_key][-100:]
+        
+        self.save_chat_logs()
+    
+    def log_admin_action(self, action, target_user_id=None, details=""):
+        """Log admin actions"""
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "admin_id": self.admin_id,
+            "action": action,
+            "target_user_id": target_user_id,
+            "details": details
+        }
+        
+        self.admin_logs.append(log_entry)
+        
+        # Keep only last 1000 admin actions
+        if len(self.admin_logs) > 1000:
+            self.admin_logs = self.admin_logs[-1000:]
+        
+        self.save_admin_logs()
+    
+    def ban_user(self, user_id, reason="No reason provided"):
+        """Ban a user"""
+        users = load_users()
+        user_str = str(user_id)
+        
+        if user_str in users:
+            users[user_str]["banned"] = True
+            users[user_str]["ban_reason"] = reason
+            users[user_str]["ban_date"] = datetime.now().isoformat()
+            save_users(users)
+            
+            self.log_admin_action("BAN_USER", user_id, f"Reason: {reason}")
+            return True, f"User {user_id} has been banned. Reason: {reason}"
+        
+        return False, "User not found"
+    
+    def unban_user(self, user_id):
+        """Unban a user"""
+        users = load_users()
+        user_str = str(user_id)
+        
+        if user_str in users:
+            users[user_str]["banned"] = False
+            users[user_str]["ban_reason"] = ""
+            users[user_str]["unban_date"] = datetime.now().isoformat()
+            save_users(users)
+            
+            self.log_admin_action("UNBAN_USER", user_id)
+            return True, f"User {user_id} has been unbanned"
+        
+        return False, "User not found"
+    
+    def give_diamonds(self, user_id, amount):
+        """Give diamonds to a user"""
+        users = load_users()
+        user_str = str(user_id)
+        
+        if user_str in users:
+            current_diamonds = users[user_str].get("diamonds", 0)
+            users[user_str]["diamonds"] = current_diamonds + amount
+            save_users(users)
+            
+            self.log_admin_action("GIVE_DIAMONDS", user_id, f"Amount: {amount}")
+            return True, f"Gave {amount} diamonds to user {user_id}. New balance: {current_diamonds + amount}"
+        
+        return False, "User not found"
+    
+    def give_vip(self, user_id, days):
+        """Give VIP status to a user"""
+        users = load_users()
+        user_str = str(user_id)
+        
+        if user_str in users:
+            current_vip = users[user_str].get("vip_expires", datetime.now().isoformat())
+            try:
+                current_vip_date = datetime.fromisoformat(current_vip)
+            except:
+                current_vip_date = datetime.now()
+            
+            # If current VIP is expired, start from now
+            if current_vip_date < datetime.now():
+                current_vip_date = datetime.now()
+            
+            new_vip_date = current_vip_date + timedelta(days=days)
+            users[user_str]["vip_expires"] = new_vip_date.isoformat()
+            users[user_str]["is_vip"] = True
+            save_users(users)
+            
+            self.log_admin_action("GIVE_VIP", user_id, f"Days: {days}")
+            return True, f"Gave {days} days VIP to user {user_id}. Expires: {new_vip_date.strftime('%Y-%m-%d %H:%M')}"
+        
+        return False, "User not found"
+    
+    def get_user_info(self, user_id):
+        """Get detailed user information"""
+        users = load_users()
+        user_str = str(user_id)
+        
+        if user_str in users:
+            user_data = users[user_str].copy()
+            
+            # Add admin-specific info
+            user_data["user_id"] = user_id
+            user_data["registration_date"] = user_data.get("registration_date", "Unknown")
+            user_data["last_active"] = user_data.get("last_active", "Unknown")
+            user_data["total_chats"] = user_data.get("total_chats", 0)
+            
+            return user_data
+        
+        return None
+    
+    def get_chat_logs(self, user_id=None, limit=50):
+        """Get chat logs for monitoring"""
+        if user_id:
+            # Get logs for specific user
+            user_logs = []
+            for chat_key, messages in self.chat_logs.items():
+                if str(user_id) in chat_key:
+                    user_logs.extend(messages)
+            
+            # Sort by timestamp and limit
+            user_logs.sort(key=lambda x: x["timestamp"], reverse=True)
+            return user_logs[:limit]
+        else:
+            # Get all recent logs
+            all_logs = []
+            for messages in self.chat_logs.values():
+                all_logs.extend(messages)
+            
+            all_logs.sort(key=lambda x: x["timestamp"], reverse=True)
+            return all_logs[:limit]
+    
+    def get_stats(self):
+        """Get bot statistics"""
+        users = load_users()
+        complaints = load_complaints()
+        
         total_users = len(users)
-        active_users = len([u for u in users.values() if u.get('active', False)])
-        vip_users = len([u for u in users.values() if u.get('vip_expires') and 
-                        datetime.fromisoformat(u['vip_expires']) > datetime.now()])
-        banned_users = len([u for u in users.values() if u.get('banned', False)])
+        active_users = sum(1 for user in users.values() if not user.get("banned", False))
+        banned_users = sum(1 for user in users.values() if user.get("banned", False))
+        vip_users = sum(1 for user in users.values() if user.get("is_vip", False))
         
-        # Load complaints
-        try:
-            with open('complaints.json', 'r') as f:
-                complaints = json.load(f)
-            total_complaints = len(complaints)
-        except:
-            total_complaints = 0
-        
-        stats_text = f"""
-📊 **Bot Statistics**
-
-👥 Total Users: `{total_users}`
-🟢 Active Users: `{active_users}`
-👑 VIP Users: `{vip_users}`
-🔨 Banned Users: `{banned_users}`
-🚨 Total Complaints: `{total_complaints}`
-
-📅 Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-        """
-        
-        await update.callback_query.edit_message_text(
-            stats_text,
-            parse_mode='Markdown'
-        )
-        
-    except Exception as e:
-        await update.callback_query.edit_message_text(f"❌ Error loading stats: {str(e)}")
-
-async def give_diamonds(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Give diamonds to a user"""
-    if update.effective_user.id != ADMIN_ID:
-        return
-    
-    if len(context.args) < 2:
-        await update.message.reply_text(
-            "❌ Usage: `/give_diamonds <user_id> <amount>`\n"
-            "Example: `/give_diamonds 123456789 1000`"
-        )
-        return
-    
-    try:
-        target_user_id = int(context.args[0])
-        amount = int(context.args[1])
-        
-        user_data = get_user_data(target_user_id)
-        if not user_data:
-            await update.message.reply_text("❌ User not found!")
-            return
-        
-        current_diamonds = user_data.get('diamonds', 0)
-        user_data['diamonds'] = current_diamonds + amount
-        save_user_data(target_user_id, user_data)
-        
-        await update.message.reply_text(
-            f"✅ Successfully gave {amount} 💎 diamonds to user {target_user_id}\n"
-            f"Their new balance: {user_data['diamonds']} 💎"
-        )
-        
-        # Notify the user
-        try:
-            await context.bot.send_message(
-                target_user_id,
-                f"🎉 You received {amount} 💎 diamonds from admin!\n"
-                f"Your new balance: {user_data['diamonds']} 💎"
-            )
-        except:
-            pass
-            
-    except ValueError:
-        await update.message.reply_text("❌ Invalid user ID or amount!")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
-
-async def give_vip(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Give VIP status to a user"""
-    if update.effective_user.id != ADMIN_ID:
-        return
-    
-    if len(context.args) < 2:
-        await update.message.reply_text(
-            "❌ Usage: `/give_vip <user_id> <days>`\n"
-            "Example: `/give_vip 123456789 30`"
-        )
-        return
-    
-    try:
-        target_user_id = int(context.args[0])
-        days = int(context.args[1])
-        
-        user_data = get_user_data(target_user_id)
-        if not user_data:
-            await update.message.reply_text("❌ User not found!")
-            return
-        
-        # Calculate VIP expiry
-        current_vip = user_data.get('vip_expires')
-        if current_vip and datetime.fromisoformat(current_vip) > datetime.now():
-            # Extend existing VIP
-            expiry_date = datetime.fromisoformat(current_vip) + timedelta(days=days)
-        else:
-            # New VIP
-            expiry_date = datetime.now() + timedelta(days=days)
-        
-        user_data['vip_expires'] = expiry_date.isoformat()
-        save_user_data(target_user_id, user_data)
-        
-        await update.message.reply_text(
-            f"✅ Successfully gave {days} days VIP to user {target_user_id}\n"
-            f"VIP expires: {expiry_date.strftime('%Y-%m-%d %H:%M:%S')}"
-        )
-        
-        # Notify the user
-        try:
-            await context.bot.send_message(
-                target_user_id,
-                f"🎉 You received {days} days of VIP status from admin!\n"
-                f"👑 VIP expires: {expiry_date.strftime('%Y-%m-%d %H:%M:%S')}"
-            )
-        except:
-            pass
-            
-    except ValueError:
-        await update.message.reply_text("❌ Invalid user ID or days!")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
-
-async def admin_ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ban a user"""
-    if update.effective_user.id != ADMIN_ID:
-        return
-    
-    if len(context.args) < 1:
-        await update.message.reply_text(
-            "❌ Usage: `/ban <user_id> [reason]`\n"
-            "Example: `/ban 123456789 Spam`"
-        )
-        return
-    
-    try:
-        target_user_id = int(context.args[0])
-        reason = " ".join(context.args[1:]) if len(context.args) > 1 else "No reason provided"
-        
-        if ban_user(target_user_id, reason):
-            await update.message.reply_text(f"✅ User {target_user_id} has been banned.\nReason: {reason}")
-            
-            # Notify the user
+        # Calculate today's registrations
+        today = datetime.now().date()
+        today_registrations = 0
+        for user in users.values():
+            reg_date = user.get("registration_date", "")
             try:
-                await context.bot.send_message(
-                    target_user_id,
-                    f"🔨 You have been banned from the bot.\nReason: {reason}\n\n"
-                    f"If you think this is a mistake, contact support."
-                )
+                if datetime.fromisoformat(reg_date).date() == today:
+                    today_registrations += 1
             except:
                 pass
-        else:
-            await update.message.reply_text("❌ User not found!")
+        
+        return {
+            "total_users": total_users,
+            "active_users": active_users,
+            "banned_users": banned_users,
+            "vip_users": vip_users,
+            "today_registrations": today_registrations,
+            "total_complaints": len(complaints),
+            "total_chat_sessions": len(self.chat_logs)
+        }
+    
+    def broadcast_message(self, message_text, target_group="all"):
+        """Prepare broadcast message data"""
+        users = load_users()
+        target_users = []
+        
+        for user_id, user_data in users.items():
+            if user_data.get("banned", False):
+                continue
             
-    except ValueError:
-        await update.message.reply_text("❌ Invalid user ID!")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
+            if target_group == "all":
+                target_users.append(int(user_id))
+            elif target_group == "vip" and user_data.get("is_vip", False):
+                target_users.append(int(user_id))
+            elif target_group == "regular" and not user_data.get("is_vip", False):
+                target_users.append(int(user_id))
+        
+        self.log_admin_action("BROADCAST", None, f"Target: {target_group}, Users: {len(target_users)}")
+        
+        return target_users, message_text
 
-async def admin_unban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Unban a user"""
-    if update.effective_user.id != ADMIN_ID:
-        return
-    
-    if len(context.args) < 1:
-        await update.message.reply_text(
-            "❌ Usage: `/unban <user_id>`\n"
-            "Example: `/unban 123456789`"
-        )
-        return
-    
-    try:
-        target_user_id = int(context.args[0])
-        
-        if unban_user(target_user_id):
-            await update.message.reply_text(f"✅ User {target_user_id} has been unbanned.")
-            
-            # Notify the user
-            try:
-                await context.bot.send_message(
-                    target_user_id,
-                    "🎉 You have been unbanned! You can now use the bot again."
-                )
-            except:
-                pass
-        else:
-            await update.message.reply_text("❌ User not found!")
-            
-    except ValueError:
-        await update.message.reply_text("❌ Invalid user ID!")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
-
-async def admin_broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Broadcast message to all users"""
-    if update.effective_user.id != ADMIN_ID:
-        return
-    
-    if len(context.args) < 1:
-        await update.message.reply_text(
-            "❌ Usage: `/broadcast <message>`\n"
-            "Example: `/broadcast Hello everyone!`"
-        )
-        return
-    
-    message = " ".join(context.args)
-    users = get_all_users()
-    
-    sent = 0
-    failed = 0
-    
-    status_msg = await update.message.reply_text("📢 Broadcasting message...")
-    
-    for user_id in users.keys():
-        try:
-            await context.bot.send_message(
-                int(user_id),
-                f"📢 **Admin Broadcast**\n\n{message}",
-                parse_mode='Markdown'
-            )
-            sent += 1
-        except:
-            failed += 1
-    
-    await status_msg.edit_text(
-        f"✅ Broadcast completed!\n"
-        f"📤 Sent: {sent}\n"
-        f"❌ Failed: {failed}"
-    )
-
-async def view_complaints(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """View user complaints"""
-    if update.effective_user.id != ADMIN_ID:
-        return
-    
-    try:
-        with open('complaints.json', 'r') as f:
-            complaints = json.load(f)
-        
-        if not complaints:
-            await update.message.reply_text("📋 No complaints found.")
-            return
-        
-        # Show latest 10 complaints
-        recent_complaints = list(complaints.items())[-10:]
-        
-        text = "🚨 **Recent Complaints:**\n\n"
-        for complaint_id, complaint in recent_complaints:
-            text += f"**ID:** `{complaint_id}`\n"
-            text += f"**From:** `{complaint['reporter_id']}`\n"
-            text += f"**Against:** `{complaint['reported_user']}`\n"
-            text += f"**Reason:** {complaint['reason']}\n"
-            text += f"**Time:** {complaint['timestamp']}\n"
-            text += "─" * 30 + "\n\n"
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
-        
-    except FileNotFoundError:
-        await update.message.reply_text("📋 No complaints file found.")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error loading complaints: {str(e)}")
-
-# Chat monitoring functions
-chat_logs = {}
-
-def log_chat_message(sender_id, receiver_id, message):
-    """Log chat messages for admin monitoring"""
-    if sender_id not in chat_logs:
-        chat_logs[sender_id] = []
-    
-    chat_logs[sender_id].append({
-        'timestamp': datetime.now().isoformat(),
-        'to': receiver_id,
-        'message': message[:100] + "..." if len(message) > 100 else message
-    })
-    
-    # Keep only last 50 messages per user
-    if len(chat_logs[sender_id]) > 50:
-        chat_logs[sender_id] = chat_logs[sender_id][-50:]
-
-async def view_user_chats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """View user chat logs (admin only)"""
-    if update.effective_user.id != ADMIN_ID:
-        return
-    
-    if len(context.args) < 1:
-        await update.message.reply_text(
-            "❌ Usage: `/view_chats <user_id>`\n"
-            "Example: `/view_chats 123456789`"
-        )
-        return
-    
-    try:
-        target_user_id = int(context.args[0])
-        
-        if str(target_user_id) not in chat_logs:
-            await update.message.reply_text("📭 No chat logs found for this user.")
-            return
-        
-        logs = chat_logs[str(target_user_id)][-20:]  # Last 20 messages
-        
-        text = f"💬 **Chat Logs for User {target_user_id}:**\n\n"
-        for log in logs:
-            text += f"**Time:** {log['timestamp'][:19]}\n"
-            text += f"**To:** `{log['to']}`\n"
-            text += f"**Message:** {log['message']}\n"
-            text += "─" * 25 + "\n\n"
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
-        
-    except ValueError:
-        await update.message.reply_text("❌ Invalid user ID!")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {str(e)}")
+# Global instance
+admin_panel = AdminPanel()
