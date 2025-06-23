@@ -1,7 +1,3 @@
-def add_referral(user_id, referred_id):
-    # Track referrals
-    pass
-
-def get_top_referrals():
-    # Return top referral users
-    pass
+def get_referral_top():
+    # Implement logic to read users.json, sort by referrals, and show top users
+    return "Referral TOP feature coming soon!"
