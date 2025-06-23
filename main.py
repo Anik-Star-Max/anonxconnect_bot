@@ -1,6 +1,5 @@
 import os
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
-
 from handlers import (
     start,
     stop,
@@ -20,7 +19,7 @@ from handlers import (
     sticker_message,
     photo_message,
     admin_commands,
-    error_handler
+    error_handler,
 )
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
