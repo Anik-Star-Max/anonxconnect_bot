@@ -1,12 +1,10 @@
-name: telegram-bot-env
+name: anonxconnect
 channels:
   - conda-forge
   - defaults
 dependencies:
-  - python=3.10  # Or your preferred Python version
+  - python=3.10
   - pip
   - pip:
       - python-telegram-bot==20.7
-      # Add any other pip dependencies here, for example:
-      # - requests
-      # - python-dotenv
+      - deep-translator
