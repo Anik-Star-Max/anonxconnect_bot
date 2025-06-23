@@ -5,7 +5,7 @@ from database import (
     connect_user, disconnect_user, vip_status, set_translate_status,
     forward_message, get_rules_text
 )
-import referral, photo_roulette
+from anonxconnect_bot import referral, photo_roulette
 
 MENU_KEYBOARD = [
     ["Referral TOP", "Profile"],
